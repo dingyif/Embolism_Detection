@@ -30,7 +30,7 @@ is_save = True
 #############################################################################
 img_dir_path = img_folder + '\Images'
 img_num = end_img_idx-start_img_idx+1
-img_paths = glob.glob(img_dir_path+'/*.png') #assuming png
+img_paths = sorted(glob.glob(img_dir_path+'/*.png')) #assuming png
 
 img_re_idx = 0 #relative index for images in start_img_idx to end_img_idx
 for filename in img_paths[start_img_idx-1:end_img_idx]: #original img: 958 rowsx646 cols
