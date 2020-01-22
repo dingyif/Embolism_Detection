@@ -23,7 +23,6 @@ Absolute path
 '''
 img_folder_rel = os.path.abspath(os.path.join(os.path.dirname(__file__),".."))
 img_folder = os.path.join(img_folder_rel,'ToyImgFiles','ALCLAT2_stem Subset')
-print('Folder Path:{}'.format(img_folder))
 is_stem = True#set to False for leaf
 start_img_idx = 101
 end_img_idx = 450
@@ -36,7 +35,6 @@ is_save = True
 img_dir_path = os.path.join(img_folder, 'Images')
 img_num = end_img_idx-start_img_idx+1
 img_paths = sorted(glob.glob(img_dir_path + '/*.png')) #assuming png 
-print('Img Path Here:{}'.format(img_paths[0:3]))
 img_re_idx = 0 #relative index for images in start_img_idx to end_img_idx
 for filename in img_paths[start_img_idx-1:end_img_idx]: #original img: 958 rowsx646 cols
     img=Image.open(filename).convert('L') #.convert('L'): gray-scale # 646x958
@@ -417,7 +415,10 @@ print("false positive img index",con_img_list[1])
 print("false negative img index",con_img_list[2])
 
 #create/empty folder
-con_output_path = [img_folder+'//false_positive',img_folder+'//false_negative',img_folder+'//true_positive']
+F_positive = os.path.join(img_folder,'false_positive')
+F_negative = os.path.join(img_folder,'false_negative')
+T_negative = os.path.join(img_folder,'true_positive')
+con_output_path = [F_positive,F_negative,T_negative]
 for foldername in con_output_path:
     if not os.path.exists(foldername):#create new folder if not existed
         os.makedirs(foldername)
