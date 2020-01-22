@@ -31,7 +31,6 @@ is_save = True
 #############################################################################
 #    Load Images
 #############################################################################
-#img_dir_path = img_folder + '/Images'
 img_dir_path = os.path.join(img_folder, 'Images')
 img_num = end_img_idx-start_img_idx+1
 img_paths = sorted(glob.glob(img_dir_path + '/*.png')) #assuming png 
