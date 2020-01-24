@@ -5,7 +5,7 @@ Created on Thu Dec  5 15:00:53 2019
 @author: USER
 """
 
-from PIL import Image
+from PIL import Image,ImageDraw,ImageFont
 import glob
 import matplotlib.pyplot as plt
 import numpy as np
@@ -16,17 +16,27 @@ import pandas as pd
 import cv2
 import operator#for contour
 import os,shutil#for creating/emptying folders
+import sys#for printing error message
 
 img_list = []
 '''
 Absolute path
 '''
 img_folder_rel = os.path.abspath(os.path.join(os.path.dirname(__file__),".."))
-img_folder = os.path.join(img_folder_rel,'ToyImgFiles','ALCLAT2_stem Subset')
-is_stem = True#set to False for leaf
-start_img_idx = 101
-end_img_idx = 450
-is_save = True
+img_folder = os.path.join(img_folder_rel,'ToyImgFiles','ALCLAT1_leaf Subset')
+#is_stem = False#set to False for leaf
+start_img_idx = 116
+end_img_idx = 307
+is_save = False
+
+#automatically decide what is_stem should be
+#assuming img_folder containes either "stem" or "leaf"
+if "stem" in img_folder :
+    is_stem = True
+elif "leaf" in img_folder:
+    is_stem = False
+else:
+    sys.exit("Error: image folder name doesn't contain strings like stem or leaf")
 
 #############################################################################
 #    Load Images
@@ -75,7 +85,8 @@ def plot_img_sum(img_3d,title_str):
     plt.ylabel("sum of pixel values in an image")
     plt.xlabel("image relative index")
     plt.title(title_str)
-    plt.savefig(img_folder+'/m0_'+title_str+'.jpg',bbox_inches='tight')
+    if is_save==True:
+        plt.savefig(img_folder+'/m0_'+title_str+'.jpg',bbox_inches='tight')
     # x-axis= image index. y-axis=sum of each img
     return(sum_of_img)
 
@@ -178,7 +189,7 @@ if is_stem==True:
 #    main function for detecting embolism
 ############################################################################# 
 def find_emoblism_by_contour(bin_stack,img_idx,stem_area,final_area_th = 20000/255,area_th=30, area_th2=30,ratio_th=5,e2_sz=3,o2_sz=1,cl2_sz=3,plot_interm=False,shift_th=0.05):
-    ############# step 1: connect the embolsim parts in the mask (more false positive) ############# 
+    ############# step 1: connect the embolism parts in the mask (more false positive) ############# 
     #    erosion(2*2) and closing(5*5)[closing_e] 
     #    --> keep contours with area>area_th and fill in the contour by polygons [contour_mask]
     #    --> expand by closing(25*25) and dilation(10,10), then find connected components [mat_cc]
@@ -232,7 +243,7 @@ def find_emoblism_by_contour(bin_stack,img_idx,stem_area,final_area_th = 20000/2
         
         num_cc,mat_cc = cv2.connectedComponents(dilate_img.astype(np.uint8))
         
-        ################### step 2: shrink the embolsim parts (more false negative) ###################
+        ################### step 2: shrink the embolism parts (more false negative) ###################
         #    erosion(e2_sz*e2_sz) and opening(o2_sz*o2_sz) and then closing(cl2_sz*cl2_sz) [closing2]
         #    --> keep contours with area>area_th2 and fill in the contour by polygons [contour_mask2]
         ################################################################################################
@@ -312,7 +323,7 @@ def find_emoblism_by_contour(bin_stack,img_idx,stem_area,final_area_th = 20000/2
             ######################### ############  step 4: reduce false positive ########################## 
             #    if the percentage of embolism in the [stem_area] is too large (probably it's because of shifting of images) 
             #        OR the embolism area is too small
-            #    --> treat as if there's no embolsim in the entire image
+            #    --> treat as if there's no embolism in the entire image
             ################################################################################################
             if np.sum(final_img)/stem_area>shift_th or np.sum(final_img)<final_area_th:
                 #percentage of embolism in the stem_area is too large
@@ -344,16 +355,54 @@ bin_stem_stack = bin_stack*is_stem_mat2
 for img_idx in range(0,bin_stack.shape[0]):
     stem_area = np.sum(is_stem_mat2[img_idx,:,:])
     final_stack[img_idx,:,:] = find_emoblism_by_contour(bin_stem_stack,img_idx,stem_area=stem_area,final_area_th = final_area_th,area_th=area_th, area_th2=area_th2,ratio_th=35,e2_sz=1,o2_sz=3,cl2_sz=2,plot_interm=False,shift_th=shift_th)
-        #find_emoblism_by_contour(bin_stack,57,area_th=30, area_th2=30,ratio_th=100,e2_sz=1,o2_sz=3,cl2_sz=2,plot_interm=True)#for leaf ALC
-    if np.any(final_stack[img_idx,:,:]):
-        has_embolism[img_idx] = 1
+    #if np.any(final_stack[img_idx,:,:]):
+    #    has_embolism[img_idx] = 1
         
+#not used here, but might be useful in the future?
+def add_img_info_to_img(img_idx,img_stack):
+    one_img = Image.fromarray(img_stack[img_idx,:,:])
+    draw = ImageDraw.Draw(one_img)
+    font = ImageFont.truetype("arial.ttf", 40)#45:font size
+    font_small = ImageFont.truetype("arial.ttf", 28)
+    draw.text((10,10), "Image "+str(img_idx+1)+" - "+str(img_idx+2), font=font)#, fill=(125))#text color
+    draw.text((10,70),img_paths[img_idx].split("\\")[-1],font=font_small)
+    draw.text((100,100),"to",font=font_small)
+    draw.text((10,130),img_paths[img_idx+1].split("\\")[-1],font=font_small)
+    one_img.save(img_folder +'/'+str(i)+'.jpg')
+
+#add_img_info_to_img(231,final_combined_inv)
+    
+def add_img_info_to_stack(img_stack):    
+    font                   = cv2.FONT_HERSHEY_SIMPLEX
+    bottomLeftCornerOfText = (10,50)
+    fontScale              = 1
+    fontColor              = 0
+    lineType               = 2
+    
+    stack_cp = np.copy(img_stack)#make a copy s.t. changes would be made on stack_cp instead of img_stack
+    
+    for img_idx in range(0,img_stack.shape[0]):
+        one_img_arr = stack_cp[img_idx,:,:]
+        cv2.putText(one_img_arr,"Image "+str(img_idx+1)+" - "+str(img_idx+2),bottomLeftCornerOfText, font, 
+            fontScale,fontColor,lineType)
+        cv2.putText(one_img_arr,img_paths[img_idx].split("\\")[-1],(10,90), font, 
+            0.7,fontColor,lineType)
+        cv2.putText(one_img_arr,"to",(100,130), font, 
+            0.7,fontColor,lineType)
+        cv2.putText(one_img_arr,img_paths[img_idx+1].split("\\")[-1],(10,170), font, 
+            0.7,fontColor,lineType)
+        #cv2.imwrite(img_folder +'/out.jpg', one_img_arr)
+    return(stack_cp)
+
+
+#combined with true tif file
+true_mask  = tiff.imread(img_folder+'/4 Mask Substack ('+str(start_img_idx)+'-'+str(end_img_idx-1)+') clean.tif')
 if is_save==True:
-    true_mask  = tiff.imread(img_folder+'/4 Mask Substack ('+str(start_img_idx)+'-'+str(end_img_idx-1)+') clean.tif')
     combined_list = (true_mask,final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
     final_combined = np.concatenate(combined_list,axis=2)
     final_combined_inv =  -final_combined+255 #invert 0 and 255 s.t. background becomes white
-    tiff.imsave(img_folder+'/combined_4_final_open_30_2_closing2_35.tif', final_combined_inv)
+    final_combined_inv_info =  add_img_info_to_stack(final_combined_inv)
+    tiff.imsave(img_folder+'/combined_4_final.tif', final_combined_inv_info)
 
 
 #############################################################################
@@ -365,6 +414,7 @@ def img_contain_emb(img_stack):
     return( np.any(np.any(img_stack,axis=2),axis=1)*1)#0 or 1
 
 true_has_emb = img_contain_emb(true_mask)
+has_embolism = img_contain_emb(final_stack)
 
 def confusion_mat_img(has_embolism,true_has_emb):
     #false positive
@@ -417,24 +467,24 @@ print("false negative img index",con_img_list[2])
 F_positive = os.path.join(img_folder,'false_positive')
 F_negative = os.path.join(img_folder,'false_negative')
 T_negative = os.path.join(img_folder,'true_positive')
-con_output_path = [F_positive,F_negative,T_negative]
-for foldername in con_output_path:
-    if not os.path.exists(foldername):#create new folder if not existed
-        os.makedirs(foldername)
-    else:#empty the existing folder
-        shutil.rmtree(foldername)#delete
-        os.makedirs(foldername)#create
-
 if is_save == True:
+    #create/empty folder
+    con_output_path = [F_positive,F_negative,T_negative]
+    for foldername in con_output_path:
+        if not os.path.exists(foldername):#create new folder if not existed
+            os.makedirs(foldername)
+        else:#empty the existing folder
+            shutil.rmtree(foldername)#delete
+            os.makedirs(foldername)#create
+    #save images into false_positive, false_negative, true_positive subfolders
     for i in con_img_list[1]:
-        plt.imsave(img_folder + "/false_positive/"+str(i)+'.jpg',255-final_combined[i,:,:],cmap='gray')
-if is_save == True:
+        plt.imsave(img_folder + "/false_positive/"+str(i)+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
+    
     for i in con_img_list[2]:
-        plt.imsave(img_folder + "/false_negative/"+str(i)+'.jpg',255-final_combined[i,:,:],cmap='gray')
-
-if is_save == True:
+        plt.imsave(img_folder + "/false_negative/"+str(i)+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
+    
     for i in con_img_list[3]:
-        plt.imsave(img_folder + "/true_positive/"+str(i)+'.jpg',255-final_combined[i,:,:],cmap='gray')
+        plt.imsave(img_folder + "/true_positive/"+str(i)+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
 #but there could still be cases where there are false positive pixels in true positive img
 
 def confusion_mat_pixel(pred_stack,true_stack):
