@@ -5,7 +5,7 @@ Created on Thu Dec  5 15:00:53 2019
 @author: USER
 """
 
-from PIL import Image, ImageDraw,ImageFont #ImageDraw,ImageFont for drawing text
+from PIL import Image,ImageDraw,ImageFont #ImageDraw,ImageFont for drawing text
 import glob
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,13 +17,14 @@ import cv2
 import operator#for contour
 import os,shutil#for creating/emptying folders
 import sys#for printing error message
+import gc
 
 img_list = []
 img_folder_rel = os.path.abspath(os.path.join(os.path.dirname(__file__),".."))
-img_folder = os.path.join(img_folder_rel,'ToyImgFiles','ALCLAT2_stem Subset')
+img_folder = os.path.join(img_folder_rel,'ToyImgFiles','CASARD2.2_leaf Subset')
 #is_stem = False#set to False for leaf
-start_img_idx = 101
-end_img_idx = 450
+start_img_idx = 176
+end_img_idx = 500
 is_save = True
 
 #automatically decide what is_stem should be
@@ -85,7 +86,8 @@ def plot_img_sum(img_3d,title_str):
     plt.ylabel("sum of pixel values in an image")
     plt.xlabel("image relative index")
     plt.title(title_str)
-    plt.savefig(img_folder+'/m0_'+title_str+'.jpg',bbox_inches='tight')
+    if is_save==True:
+        plt.savefig(img_folder+'/m0_'+title_str+'.jpg',bbox_inches='tight')
     # x-axis= image index. y-axis=sum of each img
     return(sum_of_img)
 
@@ -190,7 +192,7 @@ if is_stem==True:
 #    main function for detecting embolism
 ############################################################################# 
 def find_emoblism_by_contour(bin_stack,img_idx,stem_area,final_area_th = 20000/255,area_th=30, area_th2=30,ratio_th=5,e2_sz=3,o2_sz=1,cl2_sz=3,plot_interm=False,shift_th=0.05,density_th=0.4,num_px_th=50):
-    ############# step 1: connect the embolsim parts in the mask (more false positive) ############# 
+    ############# step 1: connect the embolism parts in the mask (more false positive) ############# 
     #    opening(2*2) and closing(5*5)[closing_e] 
     #    --> keep contours with area>area_th and fill in the contour by polygons [contour_mask]
     #    --> expand by closing(25*25) and dilation(10,10), then find connected components [mat_cc]
@@ -245,7 +247,7 @@ def find_emoblism_by_contour(bin_stack,img_idx,stem_area,final_area_th = 20000/2
         
         num_cc,mat_cc = cv2.connectedComponents(dilate_img.astype(np.uint8))
         
-        ################### step 2: shrink the embolsim parts (more false negative) ###################
+        ################### step 2: shrink the embolism parts (more false negative) ###################
         #    erosion(e2_sz*e2_sz) and opening(o2_sz*o2_sz) and then closing(cl2_sz*cl2_sz) [closing2]
         #    --> keep contours with area > area_th2 and fill in the contour by polygons [contour_mask2]
         ################################################################################################
@@ -309,8 +311,8 @@ def find_emoblism_by_contour(bin_stack,img_idx,stem_area,final_area_th = 20000/2
                     add_part = (mat_cc == cc_label)*bin_stack[img_idx,:,:]
                     area_cm2 = np.sum((mat_cc == cc_label)*contour_mask2)#number of pixels in contour_mask2 that are 1
                     if plot_interm == True:
-                        print("number of pixel added/area of that connected component in dilate_img",np.sum(add_part)/np.sum(mat_cc == cc_label))
-                    #print(str(img_idx)+":"+str(np.sum(add_part)/area_cm2))
+                        #print("number of pixel added/area of that connected component in dilate_img",np.sum(add_part)/np.sum(mat_cc == cc_label))
+                        print(str(img_idx)+":"+str(np.sum(add_part)/area_cm2))
                     if np.sum(add_part)/area_cm2 < ratio_th:# and np.sum(add_part)/np.sum(mat_cc == cc_label)>0.19:
                         '''
                         1st condition
@@ -328,9 +330,12 @@ def find_emoblism_by_contour(bin_stack,img_idx,stem_area,final_area_th = 20000/2
                 print(img_idx,np.sum(final_img)/stem_area,np.sum(final_img))
             
             #####################################  step 4: reduce false positive ########################## 
+            #    (image level)
             #    if the percentage of embolism in the [stem_area] is too large (probably it's because of shifting of images) 
             #        OR the embolism area is too small
-            #    --> treat as if there's no embolsim in the entire image
+            #    --> treat as if there's no embolism in the entire image
+            #    (connected component level)
+            #    Discard connected components w/small density or area
             ################################################################################################
             if np.sum(final_img)/stem_area > shift_th or np.sum(final_img) < final_area_th:
                 '''
@@ -341,7 +346,7 @@ def find_emoblism_by_contour(bin_stack,img_idx,stem_area,final_area_th = 20000/2
                 final_img = final_img * 0
             
             
-            #reduce false positive, discard those with small density, TODO: dilate/closing first?
+            #reduce false positive, discard those with small density
             final_img_cp = np.copy(final_img)#w/o np.copy, changes made in final_img_cp will affect final_img
             closing_3 = cv2.morphologyEx(final_img_cp.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((5,5),np.uint8))
             if plot_interm == True:
@@ -377,12 +382,16 @@ has_embolism = np.zeros(bin_stack.shape[0])#1: that img is predicted to have emb
 if is_stem == False:
     is_stem_mat2 = np.ones(bin_stack.shape)
     area_th = 30
-    area_th2 = 30
+    area_th2 = 3#30
     final_area_th = 0
     shift_th = 1
-    #density_th = 
-    #num_px_th = 
-    #final_area_th2
+    #TODO:tune parameters for leafs
+    density_th = 0.4
+    num_px_th = 50
+    final_area_th2 = 80
+    emb_freq_th = 10/191#tuned by A_leaf
+    cc_th = 3
+    ratio_th=5
 else:
     area_th = 1
     area_th2 = 3#10
@@ -390,69 +399,88 @@ else:
     shift_th = 0.06#0.05
     density_th = 0.4
     num_px_th = 50
-    final_area_th2 = 80
+    final_area_th2 = 120
     emb_freq_th = 5/349 #depends on which stages the photos are taken
     cc_th = 3
+    ratio_th=35
     
 bin_stem_stack = bin_stack*is_stem_mat2
 
-for img_idx in range(0,bin_stack.shape[0]):
+for img_idx in range(0,bin_stem_stack.shape[0]):
     stem_area = np.sum(is_stem_mat2[img_idx,:,:])
     final_stack1[img_idx,:,:] = find_emoblism_by_contour(bin_stem_stack,img_idx,stem_area = stem_area,final_area_th = final_area_th,
-                                                        area_th=area_th, area_th2=area_th2,ratio_th=35,e2_sz=1,o2_sz=2,cl2_sz=2,
+                                                        area_th=area_th, area_th2=area_th2,ratio_th=ratio_th,e2_sz=1,o2_sz=2,cl2_sz=2,
                                                         plot_interm=False,shift_th=shift_th,density_th=density_th,num_px_th=num_px_th)
+    #if np.any(final_stack[img_idx,:,:]):
+    #    has_embolism[img_idx] = 1
         
-        '''
-        #find_emoblism_by_contour(bin_stack,57,area_th=30, area_th2=30,ratio_th=100,e2_sz=1,o2_sz=3,cl2_sz=2,plot_interm=True)#for leaf ALC
-    debugging:
-    bin_stack = bin_stem_stack
-    ratio_th=35
-    e2_sz=1
-    o2_sz=2
-    cl2_sz=2
-    plot_interm=False
-    
-    if np.any(final_stack[img_idx,:,:]):
-        has_embolism[img_idx] = 1
 '''
+debugging:
+    
+bin_stack = bin_stem_stack
+ratio_th=35
+e2_sz=1
+o2_sz=2
+cl2_sz=2
+plot_interm=True
+'''
+if is_stem==True:
+    #############################################################################
+    #Don't count as embolism if it keeps appearing (probably is plastic cover)
+    #############################################################################
+    final_stack_sum = np.sum(final_stack1,axis=0)/255 #the number of times embolism has occurred in a pixel
+    #each pixel in final_stack is 0 or 255, hence we divide by 255 to make it more intuitive 
+    #plot_gray_img(final_stack_sum,"final_stack_sum")
+    not_emb_part = (final_stack_sum/(img_num-1) > emb_freq_th)
+    #plot_gray_img(not_emb_part,"not_emb_part")
+    num_cc_fss,mat_cc_fss = cv2.connectedComponents((final_stack_sum>cc_th).astype(np.uint8))
+    not_emb_cc = np.unique(not_emb_part*mat_cc_fss)
+    not_emb_mask = not_emb_part*0
+    if not_emb_cc.size > 1: #not only background
+        for not_emb_cc_label in not_emb_cc[1:]: #starts with "1", cuz "0" is for bkg
+           not_emb_mask = not_emb_mask + (mat_cc_fss == not_emb_cc_label)*1
+    plot_gray_img(not_emb_mask,"not_emb_mask")
+    not_emb_mask_exp = cv2.dilate(not_emb_mask.astype(np.uint8), np.ones((10,10),np.uint8),iterations = 1)#expand a bit
+    plot_gray_img(not_emb_mask_exp,"not_emb_mask_exp")
+    emb_cand_mask = -(not_emb_mask_exp-1)#inverse, switch 0 and 1
+    #plot_gray_img(emb_cand_mask,"emb_cand_mask")
+    final_stack = np.repeat(emb_cand_mask[np.newaxis,:,:],img_num-1,0)*final_stack1
+    
+    #treat whole img as no emb, if the number of embolized pixels is too small in an img
+    num_emb_each_img = np.sum(np.sum(final_stack/255,axis=2),axis=1)#the number of embolized pixels in each img
+    emb_cand_each_img = (num_emb_each_img>final_area_th2)*1#a vector of length = (img_num-1), 0 means the img should be treated as no emb, 1 means to keep the same way as it is
+    emb_cand_each_img1 = np.repeat(emb_cand_each_img[:,np.newaxis],final_stack.shape[1],1)
+    emb_cand_stack = np.repeat(emb_cand_each_img1[:,:,np.newaxis],final_stack.shape[2],2)
+    final_stack = emb_cand_stack*final_stack
+else:
+    final_stack = final_stack1
+    #TODO: num_emb_each_img --> too small, discard. Too big: density based segmentation?
+#    #############################################################################
+#    #2nd stage for separating the case where embolism parts is connected to the 
+#    #noises at the edges of imgs (Reduce false positive)
+#    #############################################################################
+#    final_stack_sum = np.sum(final_stack1,axis=0)/255 #the number of times embolism has occurred in a pixel
+#    #each pixel in final_stack is 0 or 255, hence we divide by 255 to make it more intuitive 
+#    #plot_gray_img(final_stack_sum,"final_stack_sum")
+#    not_emb_part = (final_stack_sum/(img_num-1) > emb_freq_th)
+#    #plot_gray_img(not_emb_part,"not_emb_part")
+#    #not_emb_mask = cv2.erode(not_emb_part.astype(np.uint8), np.ones((2,2),np.uint8),iterations = 1)#shrink/smooth a bit
+#    not_emb_mask_exp = cv2.dilate(not_emb_part.astype(np.uint8), np.ones((25,25),np.uint8),iterations = 1)#expand a bit
+#    plot_gray_img(not_emb_mask_exp,"not_emb_mask_exp")
+#    emb_cand_mask = -(not_emb_mask_exp-1)#inverse, switch 0 and 1
+#    #plot_gray_img(emb_cand_mask,"emb_cand_mask")
+#    final_stack = np.repeat(emb_cand_mask[np.newaxis,:,:],img_num-1,0)*final_stack1
+#    
+#    #treat whole img as no emb, if the number of embolized pixels is too small in an img
+#    num_emb_each_img = np.sum(np.sum(final_stack/255,axis=2),axis=1)#the number of embolized pixels in each img
+#    emb_cand_each_img = (num_emb_each_img>final_area_th2)*1#a vector of length = (img_num-1), 0 means the img should be treated as no emb, 1 means to keep the same way as it is
+#    emb_cand_each_img1 = np.repeat(emb_cand_each_img[:,np.newaxis],final_stack.shape[1],1)
+#    emb_cand_stack = np.repeat(emb_cand_each_img1[:,:,np.newaxis],final_stack.shape[2],2)
+#    final_stack = emb_cand_stack*final_stack
 
-#############################################################################
-#Don't count as embolism if it keeps appearing (probably is plastic cover)
-#############################################################################
-final_stack_sum = np.sum(final_stack1,axis=0)/255 #the number of times embolism has occurred in a pixel
-#each pixel in final_stack is 0 or 255, hence we divide by 255 to make it more intuitive 
-#plot_gray_img(final_stack_sum,"final_stack_sum")
-not_emb_part = (final_stack_sum/(img_num-1) > emb_freq_th)
-#plot_gray_img(not_emb_part,"not_emb_part")
-num_cc_fss,mat_cc_fss = cv2.connectedComponents((final_stack_sum>cc_th).astype(np.uint8))
-not_emb_cc = np.unique(not_emb_part*mat_cc_fss)
-not_emb_mask = not_emb_part*0
-if not_emb_cc.size > 1: #not only background
-    for not_emb_cc_label in not_emb_cc[1:]: #starts with "1", cuz "0" is for bkg
-       not_emb_mask = not_emb_mask + (mat_cc_fss == not_emb_cc_label)*1
-plot_gray_img(not_emb_mask,"not_emb_mask")
-not_emb_mask_exp = cv2.dilate(not_emb_mask.astype(np.uint8), np.ones((10,10),np.uint8),iterations = 1)#expand a bit
-plot_gray_img(not_emb_mask_exp,"not_emb_mask_exp")
-emb_cand_mask = -(not_emb_mask_exp-1)#inverse, switch 0 and 1
-#plot_gray_img(emb_cand_mask,"emb_cand_mask")
-final_stack = np.repeat(emb_cand_mask[np.newaxis,:,:],img_num-1,0)*final_stack1
-
-#treat whole img as no emb, if the number of embolized pixels is too small in an img
-num_emb_each_img = np.sum(np.sum(final_stack/255,axis=2),axis=1)#the number of embolized pixels in each img
-emb_cand_each_img = (num_emb_each_img>final_area_th2)*1#a vector of length = (img_num-1), 0 means the img should be treated as no emb, 1 means to keep the same way as it is
-emb_cand_each_img1 = np.repeat(emb_cand_each_img[:,np.newaxis],final_stack.shape[1],1)
-emb_cand_stack = np.repeat(emb_cand_each_img1[:,:,np.newaxis],final_stack.shape[2],2)
-final_stack = emb_cand_stack*final_stack
-
-
-#combined with true tif file
-true_mask  = tiff.imread(img_folder+'/4 Mask Substack ('+str(start_img_idx)+'-'+str(end_img_idx-1)+') clean.tif')
-combined_list = (true_mask,final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
-final_combined = np.concatenate(combined_list,axis=2)
-final_combined_inv =  -final_combined+255 #invert 0 and 255 s.t. background becomes white
 
 #not used here, but might be useful in the future?
-def add_img_info_to_img(img_idx,img_stack=final_combined_inv):
+def add_img_info_to_img(img_idx,img_stack):
     one_img = Image.fromarray(img_stack[img_idx,:,:])
     draw = ImageDraw.Draw(one_img)
     font = ImageFont.truetype("arial.ttf", 40)#45:font size
@@ -465,7 +493,7 @@ def add_img_info_to_img(img_idx,img_stack=final_combined_inv):
 
 #add_img_info_to_img(231,final_combined_inv)
     
-def add_img_info_to_stack(img_stack=final_combined_inv):    
+def add_img_info_to_stack(img_stack):    
     font                   = cv2.FONT_HERSHEY_SIMPLEX
     bottomLeftCornerOfText = (10,50)
     fontScale              = 1
@@ -486,10 +514,16 @@ def add_img_info_to_stack(img_stack=final_combined_inv):
             0.7,fontColor,lineType)
         #cv2.imwrite(img_folder +'/out.jpg', one_img_arr)
     return(stack_cp)
-final_combined_inv_info =  add_img_info_to_stack(final_combined_inv)
 
+
+#combined with true tif file
+true_mask  = tiff.imread(img_folder+'/4 Mask Substack ('+str(start_img_idx)+'-'+str(end_img_idx-1)+') clean.tif')
 if is_save==True:
-    tiff.imsave(img_folder+'/combined_4_final_open_30_2_closing2_35.tif', final_combined_inv_info)
+    combined_list = (true_mask,final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
+    final_combined = np.concatenate(combined_list,axis=2)
+    final_combined_inv =  -final_combined+255 #invert 0 and 255 s.t. background becomes white
+    final_combined_inv_info =  add_img_info_to_stack(final_combined_inv)
+    tiff.imsave(img_folder+'/combined_4_final.tif', final_combined_inv_info)
 
 
 #############################################################################
