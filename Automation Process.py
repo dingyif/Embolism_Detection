@@ -11,10 +11,11 @@ import cv2
 import operator#for contour
 import os,shutil#for creating/emptying folders
 import re
-from detect_by_contour_v3 import plot_img_sum, plot_gray_img, to_binary
-from detect_by_contour_v3 import add_img_info_to_img, add_img_info_to_stack
-from detect_by_contour_v3 import img_contain_emb, extract_foreground, find_emoblism_by_contour
-from detect_by_contour_v3 import confusion_mat_img, confusion_mat_pixel
+import sys
+from detect_by_contour_v4 import plot_img_sum, plot_gray_img, to_binary
+from detect_by_contour_v4 import add_img_info_to_img, add_img_info_to_stack
+from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour
+from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel
 
 folder_list = []
 disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -22,7 +23,7 @@ img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 all_folders_name = os.listdir(img_folder_rel)
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
-img_folder = all_folders_dir[1]
+img_folder = all_folders_dir[0]
 img_paths = sorted(glob.glob(img_folder + '/*.png'))
 tiff_paths = sorted(glob.glob(img_folder + '/*.tif'))
 #make sure it have tif file in there
@@ -77,14 +78,14 @@ if tiff_paths:
         diff_pos_stack = (diff_stack >= 0)*diff_stack #discard the negative ones
 
         #read the tiff file
-        true_diff  = tiff.imread(up_2_date_tiff)
-        if is_save==True:
-            diff_combined = np.concatenate((true_diff,diff_pos_stack.astype(np.uint8)),axis=2)
-            tiff.imsave(img_folder+'/combined_2_diff.tif', diff_combined)
+#        true_diff  = tiff.imread(up_2_date_tiff)
+#        if is_save==True:
+#            diff_combined = np.concatenate((true_diff,diff_pos_stack.astype(np.uint8)),axis=2)
+#            tiff.imsave(img_folder+'/combined_2_diff.tif', diff_combined)
         
         #check their difference, 2 figures below should look alike, but they're slightly different...
-        diff_sum = plot_img_sum(diff_pos_stack,"My Difference Stack (Positive only)")
-        true_diff_sum = plot_img_sum(true_diff,"True Difference Stack")
+        diff_sum = plot_img_sum(diff_pos_stack,"My Difference Stack (Positive only)",img_folder)
+#        true_diff_sum = plot_img_sum(true_diff,"True Difference Stack")
 
         # Thresholding (clip pixel values smaller than threshold to 0)
         #  threshold is currently set to 3 (suggested by Chris)
@@ -106,7 +107,7 @@ if tiff_paths:
                 plt.imsave(img_folder + "/m1_mean_of_binary_img.jpg",mean_img,cmap='gray')
         
         if is_stem==True:
-            is_stem_mat = extract_foreground(mean_img,expand_radius_ratio=8,is_save=True)
+            is_stem_mat = extract_foreground(mean_img,img_folder,expand_radius_ratio=8,is_save=True)
             '''
             the above is_stem_mat might be too big
             (one matrix that determines whether it's stem for all images)
@@ -180,14 +181,15 @@ if tiff_paths:
         final_stack = emb_cand_stack*final_stack
 
         #combined with true tif file
-        true_mask  = tiff.imread(img_folder+'/4 Mask Substack ('+str(start_img_idx)+'-'+str(end_img_idx-1)+') clean.tif')
+        true_mask  = tiff.imread(up_2_date_tiff)#tiff.imread(img_folder+'/4 Mask Substack ('+str(start_img_idx)+'-'+str(end_img_idx-1)+') clean.tif')
+        #true_mask = true_mask[0:901,:,:]
         combined_list = (true_mask,final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
         final_combined = np.concatenate(combined_list,axis=2)
         final_combined_inv =  -final_combined+255 #invert 0 and 255 s.t. background becomes white
 
-        final_combined_inv_info = add_img_info_to_stack(final_combined_inv)
+        final_combined_inv_info = add_img_info_to_stack(final_combined_inv,img_paths)
         if is_save==True:
-            tiff.imsave(img_folder+'/combined_4_final_open_30_2_closing2_35.tif', final_combined_inv_info)
+            tiff.imsave(img_folder+'/combined_4.tif', final_combined_inv_info)
         
         '''
         Confusion Matrix
@@ -224,5 +226,5 @@ if tiff_paths:
             for i in con_img_list[3]:
                 plt.imsave(img_folder + "/true_positive/"+str(i)+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
             #but there could still be cases where there are false positive pixels in true positive img
-            con_df_px = confusion_mat_pixel(final_stack,true_mask)
-            print(con_df_px)
+        con_df_px = confusion_mat_pixel(final_stack,true_mask)
+        print(con_df_px)
