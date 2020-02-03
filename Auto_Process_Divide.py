@@ -25,7 +25,7 @@ img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 all_folders_name = os.listdir(img_folder_rel)
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
-img_folder = all_folders_dir[1]
+img_folder = all_folders_dir[0]
 img_paths = sorted(glob.glob(img_folder + '/*.png'))
 tiff_paths = sorted(glob.glob(img_folder + '/*.tif'))
 #make sure it have tif file in there
@@ -85,7 +85,7 @@ if tiff_paths:
                 img_stack = np.ndarray((img_num,img_nrow,img_ncol), dtype=np.float32)
             img_stack[img_re_idx] = img_array
             img_re_idx = img_re_idx + 1
-        
+        print("finish loading img")
         #############################################################################
         #    Difference between consecutive images
         #    and Clip negative pixel values to 0 
@@ -95,11 +95,8 @@ if tiff_paths:
         if is_stem==False:
             diff_stack= -diff_stack#!!! don't know why, but this is needed the leafs from the diff_sum graphs
         diff_pos_stack = (diff_stack >= 0)*diff_stack #discard the negative ones
+        print("diff_pos_stack done")
 
-
-        #check their difference, 2 figures below should look alike, but they're slightly different...
-        diff_sum = plot_img_sum(diff_pos_stack,"My Difference Stack (Positive only)",img_folder)
-#        true_diff_sum = plot_img_sum(true_diff,"True Difference Stack")
 
         # Thresholding (clip pixel values smaller than threshold to 0)
         #  threshold is currently set to 3 (suggested by Chris)
@@ -108,6 +105,7 @@ if tiff_paths:
         
         #help to clip all positive px value to 1
         bin_stack = to_binary(th_stack)
+        print("bin_stack done")
         '''
         Foreground Background Segmentation
         for stem only, cuz there are clearly parts that are background (not stem)
@@ -189,6 +187,7 @@ if tiff_paths:
             final_stack1[img_idx,:,:] = find_emoblism_by_contour(bin_stem_stack,img_idx,stem_area = stem_area,final_area_th = final_area_th,
                                                         area_th=area_th, area_th2=area_th2,ratio_th=ratio_th,e2_sz=1,o2_sz=2,cl2_sz=2,
                                                         plot_interm=False,shift_th=shift_th,density_th=density_th,num_px_th=num_px_th)
+        print("1st stage done")
         '''2nd stage: reduce false positive'''
         if is_stem==True:
             '''
@@ -282,10 +281,11 @@ if tiff_paths:
             num_emb_each_img_after = np.sum(np.sum(final_stack/255,axis=2),axis=1)
             treat_as_no_emb_idx = np.nonzero(num_emb_each_img_after/(img_nrow*img_ncol)<emb_pro_th_min)[0]
             final_stack[treat_as_no_emb_idx,:,:] = np.zeros(final_stack[treat_as_no_emb_idx,:,:].shape)
-            
+        
+        print("2nd stage done")
         #combined with true tif file
         true_mask  = tiff.imread(up_2_date_tiff)#tiff.imread(img_folder+'/4 Mask Substack ('+str(start_img_idx)+'-'+str(end_img_idx-1)+') clean.tif')
-        #true_mask = true_mask[0:299,:,:]
+        true_mask = true_mask[start_img_idx:end_img_idx,:,:]
         combined_list = (true_mask,final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
         final_combined = np.concatenate(combined_list,axis=2)
         final_combined_inv =  -final_combined+255 #invert 0 and 255 s.t. background becomes white
@@ -293,12 +293,14 @@ if tiff_paths:
         final_combined_inv_info = add_img_info_to_stack(final_combined_inv,img_paths)
         if is_save==True:
             tiff.imsave(chunk_folder+'/combined_4.tif', final_combined_inv_info)
+            print("saved combined_4.tif")
         
         '''
         Confusion Matrix
         To see the performance compared to those processed manually using ImageJ
         '''
-
+        print("================results===============")
+        
         true_has_emb = img_contain_emb(true_mask)
         has_embolism = img_contain_emb(final_stack)
         con_img_list = confusion_mat_img(has_embolism,true_has_emb)
