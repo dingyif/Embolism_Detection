@@ -690,9 +690,14 @@ Leaf CAS
 True 0      302.0        4.0
 True 1       15.0        3.0
 
-desnsity_2:
+density_2:
         Predict 0  Predict 1
 True 0      241.0       65.0
+True 1        0.0       18.0
+
+density_4:
+        Predict 0  Predict 1
+True 0      262.0       44.0
 True 1        0.0       18.0
 
 Stem
@@ -841,6 +846,14 @@ True 1       8907.0    11914.0
         Predict 0  Predict 1
 True 0   0.999848    0.00010
 True 1   0.000022    0.00003
+
+density_4
+          Predict 0  Predict 1
+True 0  399522048.0    37916.0
+True 1       8907.0    11914.0
+        Predict 0  Predict 1
+True 0   0.999853   0.000095
+True 1   0.000022   0.000030
 #######Stem
 final_area_th
           Predict 0  Predict 1

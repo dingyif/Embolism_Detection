@@ -20,8 +20,8 @@ from density import density_of_a_rect
 
 folder_list = []
 disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-#img_folder_rel = os.path.join(disk_path,"Done", "Processed")
-img_folder_rel = 'F:/Diane/Col/research/code/Done/Processed'
+img_folder_rel = os.path.join(disk_path,"Done", "Processed")
+#img_folder_rel = 'F:/Diane/Col/research/code/Done/Processed'
 all_folders_name = os.listdir(img_folder_rel)
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
@@ -321,3 +321,5 @@ if tiff_paths:
         print(con_df_px)
         total_num_pixel = final_stack.shape[0]*final_stack.shape[1]*final_stack.shape[2]
         print(con_df_px/total_num_pixel)
+    else:
+        print("No match")
