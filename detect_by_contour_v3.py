@@ -18,13 +18,14 @@ import operator#for contour
 import os,shutil#for creating/emptying folders
 import sys#for printing error message
 import gc
+import density#self-written density.py
 
 img_list = []
 img_folder_rel = os.path.abspath(os.path.join(os.path.dirname(__file__),".."))
-img_folder = os.path.join(img_folder_rel,'ToyImgFiles','CASARD2.2_leaf Subset')
+img_folder = os.path.join(img_folder_rel,'ToyImgFiles','ALCLAT1_leaf Subset')
 #is_stem = False#set to False for leaf
-start_img_idx = 176
-end_img_idx = 500
+start_img_idx = 116
+end_img_idx = 307
 is_save = True
 
 #automatically decide what is_stem should be
@@ -355,7 +356,7 @@ def find_emoblism_by_contour(bin_stack,img_idx,stem_area,final_area_th = 20000/2
             final_mask3 = bin_stack[img_idx,:,:]*0
             num_cc3,mat_cc3 = cv2.connectedComponents(closing_3.astype(np.uint8))
             unique_cc_label3 = np.unique(mat_cc3)
-            if unique_cc_label3.size > 1: #not only backgroung
+            if unique_cc_label3.size > 1: #not only background
                 for cc_label3 in unique_cc_label3[1:]: #starts with "1", cuz "0" is for bkg
                     inside_cc3 = (mat_cc3 == cc_label3)*bin_stack[img_idx,:,:]
                     if plot_interm == True:
@@ -380,18 +381,37 @@ final_stack1 = np.ndarray(bin_stack.shape, dtype=np.float32)
 has_embolism = np.zeros(bin_stack.shape[0])#1: that img is predicted to have embolism
 
 if is_stem == False:
+    #Leaf
     is_stem_mat2 = np.ones(bin_stack.shape)
     area_th = 30
     area_th2 = 3#30
     final_area_th = 0
     shift_th = 1
-    #TODO:tune parameters for leafs
     density_th = 0.4
     num_px_th = 50
-    final_area_th2 = 80
-    emb_freq_th = 10/191#tuned by A_leaf
-    cc_th = 3
     ratio_th=5
+    
+    #for 2nd stage
+    emb_pro_th = 0.008 #tuned by ALCLAT1_leaf 10000/(img_nrow*img_ncol)~=0.0081
+    dens_rect_window_width = 10#15#window too small--> too much noise(false positive pixels), window too big-->can't find emb (false negative pixels) ex: not able to detect narrow veins with embolism
+    dens_img_th = 0.6#0.5
+    dens_ero_kernel_sz = 3
+    dens_exp_kernel_sz = 10#3
+    density_th2 = 0.5#0.6
+    num_px_min = 0.00032#0.00008#tuned by ALCLAT1_leaf 100/(img_nrow*img_ncol)~= 0.00008
+    num_px_max = 0.02#0.008 #ALCLAT1_leaf img_idx=83 true emb part: 0.019
+    quantile_per = 0.95
+    quantile_th = 0.75#0.7
+    plot_interm = False
+    
+    emb_pro_th_min = 0.0001
+    rect_width_th = 0.05#100/1286
+    rect_height_th = 0.02#200/959
+    cc_rect_th = 0.35#ALCLAT1_leaf img_idx=167 true emb part:0.34, img_idx=73(false positive part:0.36)
+    
+#    final_area_th2 = 80
+#    emb_freq_th = 10/191#tuned by A_leaf
+#    cc_th = 3
 else:
     area_th = 1
     area_th2 = 3#10
@@ -399,6 +419,7 @@ else:
     shift_th = 0.06#0.05
     density_th = 0.4
     num_px_th = 50
+    ratio_th=35  
     final_area_th2 = 120
     emb_freq_th = 5/349 #depends on which stages the photos are taken
     cc_th = 3
@@ -452,9 +473,70 @@ if is_stem==True:
     emb_cand_each_img1 = np.repeat(emb_cand_each_img[:,np.newaxis],final_stack.shape[1],1)
     emb_cand_stack = np.repeat(emb_cand_each_img1[:,:,np.newaxis],final_stack.shape[2],2)
     final_stack = emb_cand_stack*final_stack
-else:
-    final_stack = final_stack1
-    #TODO: num_emb_each_img --> too small, discard. Too big: density based segmentation?
+else:    
+    final_stack = np.copy(final_stack1)
+    '''
+    2nd stage for separating the case where embolism parts is connected to the 
+    noises at the edges of imgs (Reduce false positive)
+    density based segmentation + connected component
+    '''
+    #TODO (can try): num_emb_each_img --> too small, discard. Too big: use v2?
+    #still need the previous stage to first remove cases like shifting
+    #density estimation is sort of like the filter idea (just with a uniform kernel instead of gaussian/median filter)
+    num_emb_each_img = np.sum(np.sum(final_stack1/255,axis=2),axis=1)#the number of embolized pixels in each img
+    #num_emb_each_img --> too small, discard. Too big: density based segmentation+connected component
+    #density based segmentation
+    density_seg_idx = np.nonzero(num_emb_each_img/(img_nrow*img_ncol)>emb_pro_th)#images index that'll be performed density based segmentation on#TODO: tune this
+    for img_idx in density_seg_idx[0]:
+        
+        density_img = density.density_of_a_rect(bin_stem_stack[img_idx,:,:],dens_rect_window_width)
+        density_img_th = density_img>dens_img_th #thresholding
+        if plot_interm == True:
+            plot_gray_img(density_img_th)
+        density_img_ero = cv2.erode(density_img_th.astype(np.uint8), np.ones((dens_ero_kernel_sz,dens_ero_kernel_sz),np.uint8),iterations = 1)#erose to seperate embolism from noises
+        if plot_interm == True:
+            plot_gray_img(density_img_ero,str(img_idx)+"_density_img_ero")
+        density_img_exp = cv2.dilate(density_img_ero.astype(np.uint8), np.ones((dens_exp_kernel_sz,dens_exp_kernel_sz),np.uint8),iterations = 1)#expand to connect
+        if plot_interm == True:
+            plot_gray_img(density_img_exp,str(img_idx)+"_density_img_exp")
+        #TODO: erosion and dilate again?
+        final_img = np.zeros(density_img_exp.shape)
+        num_cc4,mat_cc4 = cv2.connectedComponents(density_img_exp.astype(np.uint8))
+        unique_cc_label4 = np.unique(mat_cc4)
+        if unique_cc_label4.size > 1: #not only background
+            for cc_label4 in unique_cc_label4[1:]: #starts with "1", cuz "0" is for bkg
+                inside_cc4 = (mat_cc4 == cc_label4)*bin_stack[img_idx,:,:]
+                if np.sum(inside_cc4)/(img_nrow*img_ncol)>num_px_min and np.sum(inside_cc4)/(img_nrow*img_ncol)<num_px_max: #and np.sum(inside_cc4)/np.sum(mat_cc4 == cc_label4)>density_th2:
+                    #discarding parts with small area or big area                      
+                    #estimated of density/avg density are not very different from noise..., hence use top 90% quantile
+                    if np.quantile(density_img[np.nonzero((mat_cc4 == cc_label4))], quantile_per) >= quantile_th:
+                        #discard parts with top 90% quantile being small
+                        
+                        #to discard if the rectangle bounding the connected component is too WIDE　and TALL 
+                        #and the 
+                        emb_px_pos = np.where(mat_cc4 == cc_label4)
+                        rect_top = min(emb_px_pos[0])
+                        rect_bottom = max(emb_px_pos[0])
+                        rect_left = min(emb_px_pos[1])
+                        rect_right = max(emb_px_pos[1])
+                        rect_width = rect_right-rect_left
+                        rect_height = rect_bottom-rect_top
+                        if rect_width/img_ncol<rect_width_th or rect_height/img_nrow<rect_height_th or len(emb_px_pos[0])/(rect_width*rect_height)<cc_rect_th:#np.sum(mat_cc4 == cc_label4) is the same as len(emb_px_pos[0])
+                            final_img = final_img + inside_cc4
+                            if plot_interm == True:
+                                print(cc_label4)
+                                print("estimated number of pixels inside",np.sum(inside_cc4))
+                                print("estimated of density",np.sum(inside_cc4)/np.sum(mat_cc4 == cc_label4))
+                                print("avg density",np.sum((mat_cc4 == cc_label4)*density_img)/np.sum(mat_cc4 == cc_label4))
+                                print("Q1:",np.quantile(density_img[np.nonzero((mat_cc4 == cc_label4))], quantile_per))
+                        
+        if plot_interm == True:
+            plot_gray_img(final_img,str(img_idx)+"_final_img")
+        final_stack[img_idx,:,:] = final_img*255
+    #if the proportion of embolised pixels are smaller than emb_pro_th_min, treat as no emb
+    num_emb_each_img_after = np.sum(np.sum(final_stack/255,axis=2),axis=1)
+    treat_as_no_emb_idx = np.nonzero(num_emb_each_img_after/(img_nrow*img_ncol)<emb_pro_th_min)[0]
+    final_stack[treat_as_no_emb_idx,:,:] = np.zeros(final_stack[treat_as_no_emb_idx,:,:].shape)
 #    #############################################################################
 #    #2nd stage for separating the case where embolism parts is connected to the 
 #    #noises at the edges of imgs (Reduce false positive)
@@ -572,10 +654,47 @@ Leaf ALC
 True 0      137.0       24.0
 True 1        2.0       28.0
 
+density
+        Predict 0  Predict 1
+True 0       76.0       85.0
+True 1        4.0       26.0
+
+desnsity_2:increases num_px_min, increases num_px_max
+        Predict 0  Predict 1
+True 0       50.0      111.0
+True 1        1.0       29.0
+
+density_3:emb_pro_th_min=0.0001 (~5min)
+        Predict 0  Predict 1
+True 0       60.0      101.0
+True 1        1.0       29.0
+
+density_4: rect_width_th,rect_height_th,cc_rect_th (~5min)
+        Predict 0  Predict 1
+True 0       71.0       90.0
+True 1        1.0       29.0
+
+cc_rect_th=0.4
+        Predict 0  Predict 1
+True 0       69.0       92.0
+True 1        1.0       29.0
+
+cc_rect_th=0.4
+        Predict 0  Predict 1
+True 0       71.0       90.0
+True 1        1.0       29.0
+
+-----------------------
+
 Leaf CAS
         Predict 0  Predict 1
 True 0      302.0        4.0
 True 1       15.0        3.0
+
+desnsity_2:
+        Predict 0  Predict 1
+True 0      241.0       65.0
+True 1        0.0       18.0
 
 Stem
         Predict 0  Predict 1
@@ -655,6 +774,8 @@ def confusion_mat_pixel(pred_stack,true_stack):
 
 con_df_px = confusion_mat_pixel(final_stack,true_mask)
 print(con_df_px)
+total_num_pixel = final_stack.shape[0]*final_stack.shape[1]*final_stack.shape[2]
+print(con_df_px/total_num_pixel)
 
 '''
 #######ALCLAT1_leaf Subset
@@ -662,11 +783,65 @@ print(con_df_px)
 True 0  235408544.0    75285.0
 True 1      16434.0    55066.0
 
+density
+          Predict 0  Predict 1
+True 0  235380272.0   103561.0
+True 1      25180.0    46320.0
+
+
+density_2:increases num_px_min, increases num_px_max
+false negative img index [58]
+          Predict 0  Predict 1
+True 0  234922016.0   561816.0
+True 1      13983.0    57517.0
+        Predict 0  Predict 1
+True 0   0.997311   0.002385
+True 1   0.000059   0.000244
+
+density_3:emb_pro_th_min=0.0001
+          Predict 0  Predict 1
+True 0  234922944.0   560894.0
+True 1      13983.0    57517.0
+        Predict 0  Predict 1
+True 0   0.997315   0.002381
+True 1   0.000059   0.000244
+
+density_4: rect_width_th,rect_height_th,cc_rect_th
+          Predict 0  Predict 1
+True 0  235339792.0   144043.0
+True 1      15196.0    56304.0
+        Predict 0  Predict 1
+True 0   0.999085   0.000612
+True 1   0.000065   0.000239
+
+cc_rect_th=0.4
+          Predict 0  Predict 1
+True 0  235322688.0   161149.0
+True 1      13983.0    57517.0
+        Predict 0  Predict 1
+True 0   0.999012   0.000684
+True 1   0.000059   0.000244
+
+cc_rect_th=0.35
+          Predict 0  Predict 1
+True 0  235335712.0   148119.0
+True 1      13983.0    57517.0
+        Predict 0  Predict 1
+True 0   0.999068   0.000629
+True 1   0.000059   0.000244
+
 ####### Leaf CAS
           Predict 0  Predict 1
 True 0  399552512.0     7427.0
 True 1      14448.0     6373.0
 
+density_2
+          Predict 0  Predict 1
+True 0  399519936.0    40020.0
+True 1       8907.0    11914.0
+        Predict 0  Predict 1
+True 0   0.999848    0.00010
+True 1   0.000022    0.00003
 #######Stem
 final_area_th
           Predict 0  Predict 1
