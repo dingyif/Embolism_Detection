@@ -423,7 +423,6 @@ else:
     final_area_th2 = 120
     emb_freq_th = 5/349 #depends on which stages the photos are taken
     cc_th = 3
-    ratio_th=35
     
 bin_stem_stack = bin_stack*is_stem_mat2
 
