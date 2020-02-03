@@ -22,10 +22,10 @@ import density#self-written density.py
 
 img_list = []
 img_folder_rel = os.path.abspath(os.path.join(os.path.dirname(__file__),".."))
-img_folder = os.path.join(img_folder_rel,'ToyImgFiles','ALCLAT1_leaf Subset')
+img_folder = os.path.join(img_folder_rel,'ToyImgFiles','CASARD2.2_leaf_Subset')
 #is_stem = False#set to False for leaf
-start_img_idx = 116
-end_img_idx = 307
+start_img_idx = 176
+end_img_idx = 500
 is_save = True
 
 #automatically decide what is_stem should be
