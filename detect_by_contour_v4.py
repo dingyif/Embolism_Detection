@@ -296,9 +296,9 @@ def add_img_info_to_img(img_idx,img_stack,img_paths,img_folder):
     font = ImageFont.truetype("arial.ttf", 40)#45:font size
     font_small = ImageFont.truetype("arial.ttf", 28)
     draw.text((10,10), "Image "+str(img_idx+1)+" - "+str(img_idx+2), font=font)#, fill=(125))#text color
-    draw.text((10,70),img_paths[img_idx].split("\\")[-1],font=font_small)
+    draw.text((10,70),os.path.split(img_paths[img_idx])[1],font=font_small)
     draw.text((100,100),"to",font=font_small)
-    draw.text((10,130),img_paths[img_idx+1].split("\\")[-1],font=font_small)
+    draw.text((10,130),os.path.split(img_paths[img_idx+1])[1],font=font_small)
     one_img.save(img_folder +'/'+str(i)+'.jpg')
 
 #add_img_info_to_img(231,final_combined_inv)
@@ -316,11 +316,11 @@ def add_img_info_to_stack(img_stack,img_paths):
         one_img_arr = stack_cp[img_idx,:,:]
         cv2.putText(one_img_arr,"Image "+str(img_idx+1)+" - "+str(img_idx+2),bottomLeftCornerOfText, font, 
             fontScale,fontColor,lineType)
-        cv2.putText(one_img_arr,img_paths[img_idx].split("\\")[-1],(10,90), font, 
+        cv2.putText(one_img_arr,os.path.split(img_paths[img_idx])[1],(10,90), font, 
             0.7,fontColor,lineType)
         cv2.putText(one_img_arr,"to",(100,130), font, 
             0.7,fontColor,lineType)
-        cv2.putText(one_img_arr,img_paths[img_idx+1].split("\\")[-1],(10,170), font, 
+        cv2.putText(one_img_arr,os.path.split(img_paths[img_idx+1])[1],(10,170), font, 
             0.7,fontColor,lineType)
         #cv2.imwrite(img_folder +'/out.jpg', one_img_arr)
     return(stack_cp)
