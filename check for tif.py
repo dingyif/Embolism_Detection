@@ -33,7 +33,6 @@ for i,img_folder in enumerate(all_folders_dir):
                 match=True
                 break
         
-        tiff_name = os.path.split(up_2_date_tiff)[1]
         #get which folder its processing now
         img_folder_name = os.path.split(img_folder)[1]
         print("Image Folder Name:",img_folder_name)
