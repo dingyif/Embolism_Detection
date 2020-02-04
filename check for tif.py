@@ -9,7 +9,7 @@ no_tif =[]
 disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 #img_folder_rel = 'F:/Diane/Col/research/code/Done/Processed'
-all_folders_name = os.listdir(img_folder_rel)
+all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 for i,img_folder in enumerate(all_folders_dir):
     #img_folder = all_folders_dir[0]
@@ -20,6 +20,10 @@ for i,img_folder in enumerate(all_folders_dir):
     if tiff_paths:
         #To get tif with filename "mask of result of substack"
         #choose the most recent modified one if there are multiple of them
+        
+        #first order the files by modified time. 
+        #And start from the most recently modified one, see if the filename includes "mask of result of substack".
+        #if there's one match, break the loop.
         tiff_paths.sort(key=lambda x: os.path.getmtime(x))
         for up_2_date_tiff in tiff_paths[::-1]:
             #find files with the following regex
@@ -29,7 +33,6 @@ for i,img_folder in enumerate(all_folders_dir):
                 match=True
                 break
         
-        tiff_name = os.path.split(up_2_date_tiff)[1]
         #get which folder its processing now
         img_folder_name = os.path.split(img_folder)[1]
         print("Image Folder Name:",img_folder_name)
