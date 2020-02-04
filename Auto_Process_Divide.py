@@ -27,7 +27,13 @@ img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
-img_folder = all_folders_dir[0]
+img_folder = all_folders_dir[4]
+'''
+#Need to process c folder
+img_folder_c = all_folders_dir[14:]
+img_folder = img_folder_c[0]
+'''
+print(f'img folder name : {img_folder}')
 img_paths = sorted(glob.glob(img_folder + '/*.png'))
 tiff_paths = sorted(glob.glob(img_folder + '/*.tif'))
 match = False
@@ -57,9 +63,7 @@ if match:
     real_end_img_idx = int(cand_match.group('end_img_idx')) + 1
     #get which folder its processing now
     img_folder_name = os.path.split(img_folder)[1]
-    print("Image Folder Name:",img_folder_name)
-    #real_start_img_idx = int(cand_match.group('start_img_idx'))
-    #real_end_img_idx = int(cand_match.group('end_img_idx')) + 1
+    print(f'Image Folder Name: {img_folder_name}')
 
     chunk_idx = 0#starts from 0
     chunk_size = 600#process 600 images a time
@@ -75,7 +79,7 @@ if match:
     
     start_img_idx = real_start_img_idx+chunk_idx*chunk_size
     end_img_idx = start_img_idx+chunk_size-1
-        
+ 
     if is_save==True:
         #create a "folder" for saving resulting tif files such that next time when re-run this program,
         #the resulting tif file won't be viewed as the most recent modified tiff file
