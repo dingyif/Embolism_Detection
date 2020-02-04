@@ -50,7 +50,9 @@ if tiff_paths:
         if cand_match:
             match = True
             break
-        
+if match:
+#    has_tif.append(i)##commented out for-loop for img_folder
+    print("has tiff")    
     real_start_img_idx = int(cand_match.group('start_img_idx'))
     real_end_img_idx = int(cand_match.group('end_img_idx')) + 1
     #get which folder its processing now
@@ -346,14 +348,11 @@ if tiff_paths:
     print(con_df_px)
     total_num_pixel = final_stack.shape[0]*final_stack.shape[1]*final_stack.shape[2]
     print(con_df_px/total_num_pixel)
+
+else:
+#    no_tif.append(i)##commented out for-loop for img_folder
+    print("no match")
 ##commented out for-loop for img_folder
-#if match:
-#    has_tif.append(i)
-#        #print("has tiff")
-#else:
-#    no_tif.append(i)
-#        #print("no match")
-#
 #print ("has tif: ", has_tif)
 #print ("no tif: ", no_tif)
 #
