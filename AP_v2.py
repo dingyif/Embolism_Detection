@@ -55,15 +55,13 @@ if tiff_paths:
             match=True
             break
 if match:
-    print("has tiff",up_2_date_tiff)    
-    real_start_img_idx = int(cand_match.group('start_img_idx'))
-    real_end_img_idx = int(cand_match.group('end_img_idx')) + 1
+    print("has tiff",up_2_date_tiff)
     #get which folder its processing now
     img_folder_name = os.path.split(img_folder)[1]
     print("Image Folder Name:",img_folder_name)
 
-    start_img_idx = int(match.group('start_img_idx'))
-    end_img_idx = int(match.group('end_img_idx')) + 1
+    start_img_idx = int(cand_match.group('start_img_idx'))
+    end_img_idx = int(cand_match.group('end_img_idx')) + 1
     print(start_img_idx)
     print(end_img_idx)
     #print('index: {}'.format(i))
