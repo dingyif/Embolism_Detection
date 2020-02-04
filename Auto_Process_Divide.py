@@ -77,7 +77,7 @@ if match:
     else:
         sys.exit("Error: image folder name doesn't contain strings like stem or leaf")
     
-    start_img_idx = real_start_img_idx+chunk_idx*chunk_size
+    start_img_idx = 1+chunk_idx*(chunk_size-1)#real_start_img_idx+chunk_idx*(chunk_size-1)
     end_img_idx = start_img_idx+chunk_size-1
  
     if is_save==True:
@@ -302,7 +302,9 @@ if match:
     print("2nd stage done")
     #combined with true tif file
     true_mask  = tiff.imread(up_2_date_tiff)#tiff.imread(img_folder+'/4 Mask Substack ('+str(start_img_idx)+'-'+str(end_img_idx-1)+') clean.tif')
-    true_mask = true_mask[start_img_idx:end_img_idx,:,:]
+    tm_start_img_idx = chunk_idx*(chunk_size-1)
+    tm_end_img_idx = tm_start_img_idx+chunk_size-1
+    true_mask = true_mask[tm_start_img_idx:tm_end_img_idx,:,:]
     combined_list = (true_mask,final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
     final_combined = np.concatenate(combined_list,axis=2)
     final_combined_inv =  -final_combined+255 #invert 0 and 255 s.t. background becomes white

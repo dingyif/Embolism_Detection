@@ -93,6 +93,11 @@ def extract_foreground(img_2d,chunk_folder, blur_radius=10.0,fg_threshold=0.1,ex
     not_stem_exp =  to_binary(ndimage.uniform_filter(not_stem, size=unif_radius))
     
     is_stem = (not_stem_exp==0)#invert
+    
+    plot_gray_img(is_stem)#1(white) for stem part
+    if is_save==True:
+        plt.imsave(chunk_folder + "/m2_1_is_stem_before_max_area.jpg",is_stem,cmap='gray')
+    
     num_cc_stem, mat_cc_stem = cv2.connectedComponents(is_stem.astype(np.uint8))
     unique_cc_stem_label = np.unique(mat_cc_stem) 
     #list of areas
