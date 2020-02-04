@@ -68,9 +68,9 @@ if match:
     print(end_img_idx)
     #print('index: {}'.format(i))
     is_save = True
-    if "stem" in img_folder:
+    if "stem" in img_folder.lower():
         is_stem = True
-    elif "leaf" in img_folder:
+    elif "leaf" in img_folder.lower():
         is_stem = False
     else:
         sys.exit("Error: image folder name doesn't contain strings like stem or leaf")
