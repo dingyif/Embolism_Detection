@@ -9,7 +9,7 @@ no_tif =[]
 disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 #img_folder_rel = 'F:/Diane/Col/research/code/Done/Processed'
-all_folders_name = os.listdir(img_folder_rel)
+all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 for i,img_folder in enumerate(all_folders_dir):
     #img_folder = all_folders_dir[0]
