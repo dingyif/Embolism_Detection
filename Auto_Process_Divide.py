@@ -27,7 +27,13 @@ img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
-img_folder = all_folders_dir[0]
+img_folder = all_folders_dir[4]
+'''
+#Need to process c folder
+img_folder_c = all_folders_dir[14:]
+img_folder = img_folder_c[0]
+'''
+print(f'img folder name : {img_folder}')
 img_paths = sorted(glob.glob(img_folder + '/*.png'))
 tiff_paths = sorted(glob.glob(img_folder + '/*.tif'))
 match = False
@@ -57,9 +63,7 @@ if match:
     real_end_img_idx = int(cand_match.group('end_img_idx')) + 1
     #get which folder its processing now
     img_folder_name = os.path.split(img_folder)[1]
-    print("Image Folder Name:",img_folder_name)
-    #real_start_img_idx = int(cand_match.group('start_img_idx'))
-    #real_end_img_idx = int(cand_match.group('end_img_idx')) + 1
+    print(f'Image Folder Name: {img_folder_name}')
 
     chunk_idx = 0#starts from 0
     chunk_size = 600#process 600 images a time
@@ -73,9 +77,9 @@ if match:
     else:
         sys.exit("Error: image folder name doesn't contain strings like stem or leaf")
     
-    start_img_idx = real_start_img_idx+chunk_idx*chunk_size
+    start_img_idx = 1+chunk_idx*(chunk_size-1)#real_start_img_idx+chunk_idx*(chunk_size-1)
     end_img_idx = start_img_idx+chunk_size-1
-        
+ 
     if is_save==True:
         #create a "folder" for saving resulting tif files such that next time when re-run this program,
         #the resulting tif file won't be viewed as the most recent modified tiff file
@@ -133,7 +137,7 @@ if match:
             plt.imsave(chunk_folder + "/m1_mean_of_binary_img.jpg",mean_img,cmap='gray')
     
     if is_stem==True:
-        is_stem_mat = extract_foreground(mean_img,img_folder,expand_radius_ratio=8,is_save=True)
+        is_stem_mat = extract_foreground(mean_img,chunk_folder,expand_radius_ratio=8,is_save=True)
         '''
         the above is_stem_mat might be too big
         (one matrix that determines whether it's stem for all images)
@@ -298,7 +302,9 @@ if match:
     print("2nd stage done")
     #combined with true tif file
     true_mask  = tiff.imread(up_2_date_tiff)#tiff.imread(img_folder+'/4 Mask Substack ('+str(start_img_idx)+'-'+str(end_img_idx-1)+') clean.tif')
-    true_mask = true_mask[start_img_idx:end_img_idx,:,:]
+    tm_start_img_idx = chunk_idx*(chunk_size-1)
+    tm_end_img_idx = tm_start_img_idx+chunk_size-1
+    true_mask = true_mask[tm_start_img_idx:tm_end_img_idx,:,:]
     combined_list = (true_mask,final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
     final_combined = np.concatenate(combined_list,axis=2)
     final_combined_inv =  -final_combined+255 #invert 0 and 255 s.t. background becomes white

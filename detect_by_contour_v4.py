@@ -67,7 +67,7 @@ def to_binary(img_stack):
 #    mask only the stem part to reduce false positive
 #############################################################################
 
-def extract_foreground(img_2d,img_folder,blur_radius=10.0,fg_threshold=0.1,expand_radius_ratio=5,is_save=False):
+def extract_foreground(img_2d,chunk_folder, blur_radius=10.0,fg_threshold=0.1,expand_radius_ratio=5,is_save=False):
     '''
     smooth img_2d by gaussian filter w/blur radius
     background when smoothed img > fg_threhold
@@ -93,12 +93,32 @@ def extract_foreground(img_2d,img_folder,blur_radius=10.0,fg_threshold=0.1,expan
     not_stem_exp =  to_binary(ndimage.uniform_filter(not_stem, size=unif_radius))
     
     is_stem = (not_stem_exp==0)#invert
-    plot_gray_img(is_stem+not_stem)#expansion
-    if is_save==True:
-        plt.imsave(img_folder+"/m2_expansion_foreground.jpg",is_stem+not_stem,cmap='gray')
+    
     plot_gray_img(is_stem)#1(white) for stem part
     if is_save==True:
-        plt.imsave(img_folder + "/m3_is_stem.jpg",is_stem,cmap='gray')
+        plt.imsave(chunk_folder + "/m2_1_is_stem_before_max_area.jpg",is_stem,cmap='gray')
+    
+    num_cc_stem, mat_cc_stem = cv2.connectedComponents(is_stem.astype(np.uint8))
+    unique_cc_stem_label = np.unique(mat_cc_stem) 
+    #list of areas
+    area = []
+    if unique_cc_stem_label.size > 1: #more than 1 area 
+        for cc_label_stem in unique_cc_stem_label[1:]:
+            area.append(np.sum(mat_cc_stem == cc_label_stem))
+    #real stem part
+    max_area = max(area)
+    for cc_label_stem in unique_cc_stem_label[1:]:
+        if np.sum(mat_cc_stem == cc_label_stem) < max_area:
+            mat_cc_stem[mat_cc_stem == cc_label_stem] = 0
+        
+    is_stem = is_stem * mat_cc_stem
+
+    plot_gray_img(is_stem+not_stem)#expansion
+    if is_save==True:
+        plt.imsave(chunk_folder+"/m2_expansion_foreground.jpg",is_stem+not_stem,cmap='gray')
+    plot_gray_img(is_stem)#1(white) for stem part
+    if is_save==True:
+        plt.imsave(chunk_folder + "/m3_is_stem.jpg",is_stem,cmap='gray')
     return(is_stem)#logical 2D array
 
 #############################################################################
