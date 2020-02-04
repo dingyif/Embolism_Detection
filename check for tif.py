@@ -20,6 +20,10 @@ for i,img_folder in enumerate(all_folders_dir):
     if tiff_paths:
         #To get tif with filename "mask of result of substack"
         #choose the most recent modified one if there are multiple of them
+        
+        #first order the files by modified time. 
+        #And start from the most recently modified one, see if the filename includes "mask of result of substack".
+        #if there's one match, break the loop.
         tiff_paths.sort(key=lambda x: os.path.getmtime(x))
         for up_2_date_tiff in tiff_paths[::-1]:
             #find files with the following regex
