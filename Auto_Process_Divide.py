@@ -133,7 +133,7 @@ if match:
             plt.imsave(chunk_folder + "/m1_mean_of_binary_img.jpg",mean_img,cmap='gray')
     
     if is_stem==True:
-        is_stem_mat = extract_foreground(mean_img,img_folder,expand_radius_ratio=8,is_save=True)
+        is_stem_mat = extract_foreground(mean_img,chunk_folder,expand_radius_ratio=8,is_save=True)
         '''
         the above is_stem_mat might be too big
         (one matrix that determines whether it's stem for all images)
