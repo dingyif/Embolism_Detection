@@ -106,12 +106,12 @@ def extract_foreground(img_2d,chunk_folder, blur_radius=10.0,fg_threshold=0.1,ex
         for cc_label_stem in unique_cc_stem_label[1:]:
             area.append(np.sum(mat_cc_stem == cc_label_stem))
     #real stem part
-    max_area = max(area)
-    for cc_label_stem in unique_cc_stem_label[1:]:
-        if np.sum(mat_cc_stem == cc_label_stem) < max_area:
-            mat_cc_stem[mat_cc_stem == cc_label_stem] = 0
-        
-    is_stem = is_stem * mat_cc_stem
+    if area:
+        max_area = max(area)
+        for cc_label_stem in unique_cc_stem_label[1:]:
+            if np.sum(mat_cc_stem == cc_label_stem) < max_area:
+                mat_cc_stem[mat_cc_stem == cc_label_stem] = 0
+        is_stem = is_stem * mat_cc_stem
 
     plot_gray_img(is_stem+not_stem)#expansion
     if is_save==True:
