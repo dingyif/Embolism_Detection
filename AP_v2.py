@@ -60,8 +60,8 @@ if match:
     img_folder_name = os.path.split(img_folder)[1]
     print("Image Folder Name:",img_folder_name)
 
-    start_img_idx = int(cand_match.group('start_img_idx'))
-    end_img_idx = int(cand_match.group('end_img_idx')) + 1
+    start_img_idx = 1#int(cand_match.group('start_img_idx'))
+    end_img_idx = int(cand_match.group('end_img_idx'))-(int(cand_match.group('start_img_idx'))-1) + 1
     print(start_img_idx)
     print(end_img_idx)
     #print('index: {}'.format(i))
