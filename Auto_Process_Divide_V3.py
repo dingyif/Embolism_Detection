@@ -11,7 +11,7 @@ import sys
 from detect_by_contour_v4 import plot_gray_img, to_binary,plot_img_sum
 from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB
 from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
-from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel
+from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel,calc_metric
 from density import density_of_a_rect
 from detect_by_filter_fx import median_filter_stack
 
@@ -24,7 +24,7 @@ img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
-img_folder = all_folders_dir[22]
+img_folder = all_folders_dir[34]
 
 #Need to process c folder
 #img_folder_c = all_folders_dir[14:]
@@ -63,7 +63,7 @@ if match:
     print(f'Image Folder Name: {img_folder_name}')
 
     chunk_idx = 0#starts from 0
-    chunk_size = 1388#process 600 images a time
+    chunk_size = 200#process 600 images a time
     #print('index: {}'.format(i))
     is_save = True
 
@@ -262,6 +262,7 @@ if match:
         emb_cand_each_img1 = np.repeat(emb_cand_each_img[:,np.newaxis],final_stack.shape[1],1)
         emb_cand_stack = np.repeat(emb_cand_each_img1[:,:,np.newaxis],final_stack.shape[2],2)
         final_stack = emb_cand_stack*final_stack
+        #final_stack=final_stack1
     else:    
         final_stack = np.copy(final_stack1)
         '''
@@ -381,16 +382,25 @@ if match:
     #print(con_df_px)
     total_num_pixel = final_stack.shape[0]*final_stack.shape[1]*final_stack.shape[2]
     #print(con_df_px/total_num_pixel)
+    metrix_img = calc_metric(con_img_list[0])
+    metrix_px = calc_metric(con_df_px)
     with open (chunk_folder + '/confusion_mat_file.txt',"w") as f:
+        f.write('img level metric:\n')
+        f.write(str(metrix_img))
+        f.write(str("\n\n"))
         f.write(str(con_img_list[0]))
         f.write(str("\n\n"))
         f.write(f'false positive img index: {con_img_list[1]}')
         f.write(str("\n\n"))
-        f.write(f'false negative img index: {con_img_list[2]}')    
+        f.write(f'false negative img index: {con_img_list[2]}')
+        f.write(str("\n\n"))
+        f.write('pixel level metric:\n')
+        f.write(str(metrix_px))
         f.write(str("\n\n"))
         f.write(f'con_df_px: \n {con_df_px}')
         f.write(str("\n\n"))
         f.write(f'probability of pix: \n {(con_df_px/total_num_pixel)}')
+        
 
 else:
 #    no_tif.append(i)##commented out for-loop for img_folder
