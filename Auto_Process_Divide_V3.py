@@ -8,8 +8,8 @@ import cv2
 import os,shutil#for creating/emptying folders
 import re
 import sys
-from detect_by_contour_v4 import plot_gray_img, to_binary
-from detect_by_contour_v4 import add_img_info_to_stack
+from detect_by_contour_v4 import plot_gray_img, to_binary,plot_img_sum
+from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB
 from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
 from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel
 from density import density_of_a_rect
@@ -18,13 +18,13 @@ from detect_by_filter_fx import median_filter_stack
 folder_list = []
 has_tif = []
 no_tif =[]
-disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-#disk_path = 'F:/Diane/Col/research/code/'
+#disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+disk_path = 'F:/Diane/Col/research/code/'
 img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
-img_folder = all_folders_dir[34]
+img_folder = all_folders_dir[22]
 
 #Need to process c folder
 #img_folder_c = all_folders_dir[14:]
@@ -63,7 +63,7 @@ if match:
     print(f'Image Folder Name: {img_folder_name}')
 
     chunk_idx = 0#starts from 0
-    chunk_size = 1536#process 600 images a time
+    chunk_size = 1388#process 600 images a time
     #print('index: {}'.format(i))
     is_save = True
 
@@ -80,7 +80,7 @@ if match:
     if is_save==True:
         #create a "folder" for saving resulting tif files such that next time when re-run this program,
         #the resulting tif file won't be viewed as the most recent modified tiff file
-        chunk_folder = os.path.join(img_folder,img_folder_name,'v5_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
+        chunk_folder = os.path.join(img_folder,img_folder_name,'v6_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
         if not os.path.exists(chunk_folder):#create new folder if not existed
             os.makedirs(chunk_folder)
         else:#empty the existing folder
@@ -133,7 +133,7 @@ if match:
         if is_save==True:
             plt.imsave(chunk_folder + "/m1_mean_of_binary_img.jpg",mean_img,cmap='gray')
     
-#    if is_stem==True:
+    if is_stem==True:
 #        is_stem_mat = extract_foreground(mean_img,chunk_folder,expand_radius_ratio=8,is_save=True)
 #        '''
 #        the above is_stem_mat might be too big
@@ -151,6 +151,18 @@ if match:
 #        is_stem_mat2 = bigger_than_mean[:-1,:,:]*(is_stem_mat*1)
 #        #drop the last img s.t. size would be the same as diff_stack
 #        #multiply by is_stem_mat to crudely remove the noises (false positive) outside of is_stem_mat2
+        is_stem_mat2 = np.ones(bin_stack.shape)
+        img_re_idx = 0
+        for filename in img_paths[(start_img_idx-1):(end_img_idx-1)]: #original img: 958 rowsx646 cols
+            imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
+            imgGarray=imgRGB_arr[:,:,1] #only look at G layer
+            #put in the correct data structure
+            if img_re_idx==0:
+                is_stem_mat2[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=3,is_save=True)
+            else:
+                is_stem_mat2[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=3)
+            img_re_idx = img_re_idx + 1
+        print("finish is_stem_mat2")
     
     final_stack1 = np.ndarray(bin_stack.shape, dtype=np.float32)
     has_embolism = np.zeros(bin_stack.shape[0])#1: that img is predicted to have embolism
@@ -184,13 +196,14 @@ if match:
         rect_height_th = 0.02#200/959
         cc_rect_th = 0.35#ALCLAT1_leaf img_idx=167 true emb part:0.34, img_idx=73(false positive part:0.36)
     else:
-        is_stem_mat2 = np.ones(bin_stack.shape)
+        #is_stem_mat2 = np.ones(bin_stack.shape)
         area_th = 1
         area_th2 = 3#10
         c1_sz = max(round(25/646*img_ncol),1)
         d1_sz = max(round(10/646*img_ncol),1)
         final_area_th = 78
-        shift_th = 0.06#0.05
+        shift_th = 0.3#(has to be > 0.05 for a2_stem img_idx=224; has to > 0.19 for c4_stem img_idx=39; has to <0.29 for a4_stem img_idx=5; but has to be <0.19 for a4_stem img_idx=1
+        #TODO: don't use shift_th, but use img_sum?
         density_th = 0.4
         num_px_th = 50
         ratio_th=35  
@@ -233,8 +246,12 @@ if match:
             for not_emb_cc_label in not_emb_cc[1:]: #starts with "1", cuz "0" is for bkg
                 not_emb_mask = not_emb_mask + (mat_cc_fss == not_emb_cc_label)*1
         plot_gray_img(not_emb_mask,"not_emb_mask")
+        if is_save==True:
+            plt.imsave(chunk_folder + "/not_emb_mask.jpg",not_emb_mask,cmap='gray')
         not_emb_mask_exp = cv2.dilate(not_emb_mask.astype(np.uint8), np.ones((10,10),np.uint8),iterations = 1)#expand a bit
         plot_gray_img(not_emb_mask_exp,"not_emb_mask_exp")
+        if is_save==True:
+            plt.imsave(chunk_folder + "/not_emb_mask_exp.jpg",not_emb_mask_exp,cmap='gray')
         emb_cand_mask = -(not_emb_mask_exp-1)#inverse, switch 0 and 1
         #plot_gray_img(emb_cand_mask,"emb_cand_mask")
         final_stack = np.repeat(emb_cand_mask[np.newaxis,:,:],img_num-1,0)*final_stack1
