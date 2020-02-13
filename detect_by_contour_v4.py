@@ -112,6 +112,8 @@ def extract_foreground(img_2d,chunk_folder, blur_radius=10.0,fg_threshold=0.1,ex
             if np.sum(mat_cc_stem == cc_label_stem) < max_area:
                 mat_cc_stem[mat_cc_stem == cc_label_stem] = 0
         is_stem = is_stem * mat_cc_stem
+    else:#no part is being selected as stem --> treat entire img as stem
+        is_stem = is_stem+1
 
     plot_gray_img(is_stem+not_stem)#expansion
     if is_save==True:
@@ -186,6 +188,197 @@ def find_emoblism_by_contour(bin_stack,img_idx,stem_area,final_area_th = 20000/2
         ################################################################################################
         kernel_e2 = np.ones((e2_sz,e2_sz),np.uint8) #square image kernel used for erosion
         erosion2 = cv2.erode(bin_stack[img_idx,:,:].astype(np.uint8), kernel_e2,iterations = 1) #refines all edges in the binary image
+        if plot_interm == True:
+            plot_gray_img(erosion2, str(img_idx) + "_erosion2")
+        
+        kernel_o2 = np.ones((o2_sz,o2_sz),np.uint8)
+        #https://homepages.inf.ed.ac.uk/rbf/HIPR2/open.htm
+        opening = cv2.morphologyEx(erosion2.astype(np.uint8), cv2.MORPH_OPEN, kernel_o2)
+        #tends to remove some of the foreground (bright) pixels from the edges of regions of foreground pixels.
+        #However it is less destructive than erosion in general.
+        
+        if plot_interm == True:
+            plot_gray_img(opening, str(img_idx) + "_opening2")
+        
+        #the closing here is needed for cases like ALCLAT1_leaf Subset: img_idx = 57
+        #where embolism is break into small chunks and disappear mostly after opening
+        kernel_cl2 = np.ones((cl2_sz,cl2_sz),np.uint8)
+        closing2 = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, kernel_cl2)
+        if plot_interm == True:
+            plot_gray_img(closing2,str(img_idx)+"_closing2")
+
+        #find contours with simple approximation
+        contours2, hierarchy2 = cv2.findContours(closing2,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE) 
+        
+        #list to hold all areas
+        areas2 = [cv2.contourArea(contour2) for contour2 in contours2]
+         
+        #remove particles with area < area_th2
+        area_index2 = [i for i,val in enumerate(areas2) if val >= area_th2]#extract the index in areas with areas>=area_th
+        #enumerate is used in case there are multiply indices with the same areas value
+        
+        if len(area_index2) == 0:#no particles with area >= area_th
+            return(bin_stack[img_idx,:,:]*0)#just return no embolism
+        else:
+            cnt2 = operator.itemgetter(*area_index2)(contours2)
+            #cnt = [contours[area_index]] #only useful when area_index only has one element
+            
+            closing_contour2 = cv2.fillPoly(closing2, cnt2, 125)
+            #includes closing(0 or 255) and areas in cnt(125)
+            contour_mask2 = (closing_contour2==125)# = True if px is in cnt
+            if plot_interm == True:
+                plot_gray_img(contour_mask2,str(img_idx)+"_contour_mask2")
+            
+            ################### step 3: pixel values from step2 correspond to which connected component from step1 ###################
+            #    for a pixel w/ value = 1 in [contour_mask2],
+            #    --> the intersection of the connected component [mat_cc] where that pixel falls into and 
+            #        binarized image [bin_stack] is treated as an candidate for embolism [add_part]
+            #    -->if (the area of [add_part])/(the area of intersection of connected component and [contour_mask2]) < ratio_th,
+            #        [add_part] is an embolism
+            #        (this condition is needed to avoid the case that a small noise in [contour_mask] leads to a really big [add_part])
+            ###########################################################################################################################
+            
+            intersect_img = mat_cc*contour_mask2 #intersect connected component mat with bin_contour_img2
+            unique_cc_label = np.unique(intersect_img)#see which connected component should be kept
+            final_mask = bin_stack[img_idx,:,:]*0
+            if unique_cc_label.size > 1: #not only backgroung
+                for cc_label in unique_cc_label[1:]: #starts with "1", cuz "0" is for bkg
+                    add_part = (mat_cc == cc_label)*bin_stack[img_idx,:,:]
+                    area_cm2 = np.sum((mat_cc == cc_label)*contour_mask2)#number of pixels in contour_mask2 that are 1
+                    if plot_interm == True:
+                        #print("number of pixel added/area of that connected component in dilate_img",np.sum(add_part)/np.sum(mat_cc == cc_label))
+                        print(str(img_idx)+":"+str(np.sum(add_part)/area_cm2))
+                    if np.sum(add_part)/area_cm2 < ratio_th:# and np.sum(add_part)/np.sum(mat_cc == cc_label)>0.19:
+                        '''
+                        1st condition
+                        avoid the case that a small noise in contour_mask leads to a really big "add_part"
+                        that are essentially just noises
+                        case: ALCLAT1_leaf Subset: img_idx = 190
+                        2nd condition
+                        crude way of discarding parts with low density
+                        '''
+                        final_mask = final_mask + add_part
+                    
+            final_img = np.copy(final_mask)
+            if plot_interm == True:
+                plot_gray_img(final_mask,str(img_idx)+"_final_mask")
+                print(img_idx,np.sum(final_img)/stem_area,np.sum(final_img))
+            
+            #####################################  step 4: reduce false positive ########################## 
+            #    (image level)
+            #    if the percentage of embolism in the [stem_area] is too large (probably it's because of shifting of images) 
+            #        OR the embolism area is too small
+            #    --> treat as if there's no embolism in the entire image
+            #    (connected component level)
+            #    Discard connected components w/small density or area
+            ################################################################################################
+            if np.sum(final_img)/stem_area > shift_th or np.sum(final_img) < final_area_th:
+                '''
+                percentage of embolism in the stem_area is too large
+                probably is false positive due to shifting of img (case: stem img_idx=66,67)
+                remove false positive with really small sizes
+                '''
+                final_img = final_img * 0
+            
+            
+            #reduce false positive, discard those with small density
+            final_img_cp = np.copy(final_img)#w/o np.copy, changes made in final_img_cp will affect final_img
+            closing_3 = cv2.morphologyEx(final_img_cp.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((5,5),np.uint8))
+            if plot_interm == True:
+                plot_gray_img(closing_3,str(img_idx)+"_closing_3")
+            
+            final_mask3 = bin_stack[img_idx,:,:]*0
+            num_cc3,mat_cc3 = cv2.connectedComponents(closing_3.astype(np.uint8))
+            unique_cc_label3 = np.unique(mat_cc3)
+            if unique_cc_label3.size > 1: #not only background
+                for cc_label3 in unique_cc_label3[1:]: #starts with "1", cuz "0" is for bkg
+                    inside_cc3 = (mat_cc3 == cc_label3)*bin_stack[img_idx,:,:]
+                    if plot_interm == True:
+                        print("estimated of density",np.sum(inside_cc3)/np.sum(mat_cc3 == cc_label3))
+                        print("estimated number of pixels inside",np.sum(inside_cc3))
+                    #print(str(img_idx)+":"+str(np.sum(add_part)/area_cm2))
+                    if np.sum(inside_cc3)/np.sum(mat_cc3 == cc_label3)>density_th and np.sum(inside_cc3)>num_px_th :
+                        #discarding parts with low density
+                        #discarding parts with small area ( ~ < 50 pixels) #!!! threshold for small area: depends on the distance btw the camera and the stem 
+                            
+                        final_mask3 = final_mask3 + inside_cc3
+            if plot_interm == True:
+                plot_gray_img(final_mask3,str(img_idx)+"_final_mask3")
+            final_img = final_mask3
+            
+            if plot_interm == True:
+                plot_gray_img(final_img,str(img_idx)+"_final_img")
+            return(final_img*255)
+            
+def find_emoblism_by_filter_contour(bin_stack,filter_stack,img_idx,stem_area,final_area_th = 20000/255,area_th=30, area_th2=30,ratio_th=5,c1_sz=25,d1_sz=10,e2_sz=3,o2_sz=1,cl2_sz=3,plot_interm=False,shift_th=0.05,density_th=0.4,num_px_th=50):
+    ############# step 1: connect the embolism parts in the mask (more false positive) ############# 
+    #    opening(2*2) and closing(5*5)[closing_e] 
+    #    --> keep contours with area>area_th and fill in the contour by polygons [contour_mask]
+    #    --> expand by closing(25*25) and dilation(10,10), then find connected components [mat_cc]
+    ################################################################################################
+    filter_img = filter_stack[img_idx,:,:]
+    
+#    if plot_interm == True:
+#        plot_gray_img(filter_img,str(img_idx)+"_filter_img")
+#    
+#    contours, _ = cv2.findContours(filter_img.astype(np.uint8),cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE) 
+    
+    kernel = np.ones((2,2),np.uint8) #square image kernel used for erosion
+    #erosion = cv2.erode(bin_stack[img_idx,:,:].astype(np.uint8), kernel,iterations = 1) #refines all edges in the binary image
+    opening1 = cv2.morphologyEx(filter_img.astype(np.uint8), cv2.MORPH_OPEN, kernel)
+    if plot_interm == True:
+        #plot_gray_img(erosion,str(img_idx)+"_erosion")
+        plot_gray_img(opening1,str(img_idx)+"_opening1")
+    
+    kernel_cl = np.ones((5,5),np.uint8)
+    #closing_e = cv2.morphologyEx(erosion, cv2.MORPH_CLOSE, kernel_cl)
+    closing_e = cv2.morphologyEx(opening1, cv2.MORPH_CLOSE, kernel_cl)
+    #using a larger kernel (kernel_cl to connect the embolism part)
+    #enlarge the boundaries of foreground (bright) regions
+    if plot_interm == True:
+        plot_gray_img(closing_e,str(img_idx)+"_closing_e")
+    
+    contours, _ = cv2.findContours(closing_e,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE) 
+    #find contours with simple approximation
+    
+    #list to hold all areas
+    areas = [cv2.contourArea(contour) for contour in contours]
+    
+    #remove particles with area < area_th
+    area_index = [i for i,val in enumerate(areas) if val >= area_th]#extract the index in areas with areas >= area_th
+    #enumerate is used in case there are multiply indices with the same areas value
+    
+    if len(area_index) == 0:#no particles with area >= area_th
+        return(bin_stack[img_idx,:,:]*0)#just return no embolism
+    
+    else:
+        cnt = operator.itemgetter(*area_index)(contours)
+        
+        closing_contour = cv2.fillPoly(filter_img, cnt, 125)
+        #includes closing(0 or 255) and areas in cnt(125)
+        contour_mask = (closing_contour==125)# = True if px is in cnt
+        if plot_interm == True:
+            plot_gray_img(contour_mask,str(img_idx)+"_contour_mask")
+        
+        #expand a bit to connect the components
+        kernel_cla = np.ones((c1_sz,c1_sz),np.uint8)
+        closing_a = cv2.morphologyEx((contour_mask*1).astype(np.uint8), cv2.MORPH_CLOSE, kernel_cla)
+        if plot_interm == True:
+            plot_gray_img(closing_a,str(img_idx)+"_closing_a")
+        
+        kernel_d = np.ones((d1_sz,d1_sz),np.uint8)
+        dilate_img = cv2.dilate(closing_a, kernel_d,iterations = 1)
+        if plot_interm == True:
+            plot_gray_img(dilate_img,str(img_idx)+"_dilate_img")
+        
+        num_cc,mat_cc = cv2.connectedComponents(dilate_img.astype(np.uint8))
+        
+        ################### step 2: shrink the embolism parts (more false negative) ###################
+        #    erosion(e2_sz*e2_sz) and opening(o2_sz*o2_sz) and then closing(cl2_sz*cl2_sz) [closing2]
+        #    --> keep contours with area > area_th2 and fill in the contour by polygons [contour_mask2]
+        ################################################################################################
+        kernel_e2 = np.ones((e2_sz,e2_sz),np.uint8) #square image kernel used for erosion
+        erosion2 = cv2.erode(filter_img, kernel_e2,iterations = 1) #refines all edges in the binary image
         if plot_interm == True:
             plot_gray_img(erosion2, str(img_idx) + "_erosion2")
         

@@ -3,35 +3,32 @@ from PIL import Image
 import glob
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import ndimage #for median filter,extract foreground
-import time #to time function performance
 import tifffile as tiff #for numpy array in tiff formate; read bioimage
-import pandas as pd
 import cv2
-import operator#for contour
 import os,shutil#for creating/emptying folders
 import re
 import sys
-from detect_by_contour_v4 import plot_img_sum, plot_gray_img, to_binary
-from detect_by_contour_v4 import add_img_info_to_img, add_img_info_to_stack
-from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour
+from detect_by_contour_v4 import plot_gray_img, to_binary
+from detect_by_contour_v4 import add_img_info_to_stack
+from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
 from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel
 from density import density_of_a_rect
+from detect_by_filter_fx import median_filter_stack
 
 folder_list = []
 has_tif = []
 no_tif =[]
 disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+#disk_path = 'F:/Diane/Col/research/code/'
 img_folder_rel = os.path.join(disk_path,"Done", "Processed")
-#img_folder_rel = 'F:/Diane/Col/research/code/Done/Processed'
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
-#img_folder = all_folders_dir[1]
+img_folder = all_folders_dir[34]
 
 #Need to process c folder
-img_folder_c = all_folders_dir[14:]
-img_folder = img_folder_c[2]
+#img_folder_c = all_folders_dir[14:]
+#img_folder = img_folder_c[2]
 print(f'img folder name : {img_folder}')
 
 img_paths = sorted(glob.glob(img_folder + '/*.png'))
@@ -66,7 +63,7 @@ if match:
     print(f'Image Folder Name: {img_folder_name}')
 
     chunk_idx = 0#starts from 0
-    chunk_size = 600#process 600 images a time
+    chunk_size = 1536#process 600 images a time
     #print('index: {}'.format(i))
     is_save = True
 
@@ -83,7 +80,7 @@ if match:
     if is_save==True:
         #create a "folder" for saving resulting tif files such that next time when re-run this program,
         #the resulting tif file won't be viewed as the most recent modified tiff file
-        chunk_folder = os.path.join(img_folder,img_folder_name,str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
+        chunk_folder = os.path.join(img_folder,img_folder_name,'v5_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
         if not os.path.exists(chunk_folder):#create new folder if not existed
             os.makedirs(chunk_folder)
         else:#empty the existing folder
@@ -96,7 +93,7 @@ if match:
     for filename in img_paths[start_img_idx-1:end_img_idx]: #original img: 958 rowsx646 cols
         img=Image.open(filename).convert('L') #.convert('L'): gray-scale # 646x958
         img_array=np.float32(img) #convert from Image object to numpy array (black 0-255 white); 958x646
-        #pu in the correct data structure
+        #put in the correct data structure
         if img_re_idx == 0:
             img_nrow = img_array.shape[0]
             img_ncol = img_array.shape[1]
@@ -136,24 +133,24 @@ if match:
         if is_save==True:
             plt.imsave(chunk_folder + "/m1_mean_of_binary_img.jpg",mean_img,cmap='gray')
     
-    if is_stem==True:
-        is_stem_mat = extract_foreground(mean_img,chunk_folder,expand_radius_ratio=8,is_save=True)
-        '''
-        the above is_stem_mat might be too big
-        (one matrix that determines whether it's stem for all images)
-        for each img, 
-            use the fact that stem is brighter than background from original img 
-            --> threshold by mean of each image to get another estimate of whether 
-            it's stem or not for each img
-            --> then intersect with is_stem_mat, to get final the final is_stem_mat2 
-        '''
-        mean_each_img = np.mean(np.mean(img_stack,axis=2),axis=1)#mean of each image
-        mean_each_stack = np.repeat(mean_each_img[:,np.newaxis],img_stack.shape[1],1)
-        mean_each_stack = np.repeat(mean_each_stack[:,:,np.newaxis],img_stack.shape[2],2) 
-        bigger_than_mean =  img_stack > mean_each_stack#thresholded by mean
-        is_stem_mat2 = bigger_than_mean[:-1,:,:]*(is_stem_mat*1)
-        #drop the last img s.t. size would be the same as diff_stack
-        #multiply by is_stem_mat to crudely remove the noises (false positive) outside of is_stem_mat2
+#    if is_stem==True:
+#        is_stem_mat = extract_foreground(mean_img,chunk_folder,expand_radius_ratio=8,is_save=True)
+#        '''
+#        the above is_stem_mat might be too big
+#        (one matrix that determines whether it's stem for all images)
+#        for each img, 
+#            use the fact that stem is brighter than background from original img 
+#            --> threshold by mean of each image to get another estimate of whether 
+#            it's stem or not for each img
+#            --> then intersect with is_stem_mat, to get final the final is_stem_mat2 
+#        '''
+#        mean_each_img = np.mean(np.mean(img_stack,axis=2),axis=1)#mean of each image
+#        mean_each_stack = np.repeat(mean_each_img[:,np.newaxis],img_stack.shape[1],1)
+#        mean_each_stack = np.repeat(mean_each_stack[:,:,np.newaxis],img_stack.shape[2],2) 
+#        bigger_than_mean =  img_stack > mean_each_stack#thresholded by mean
+#        is_stem_mat2 = bigger_than_mean[:-1,:,:]*(is_stem_mat*1)
+#        #drop the last img s.t. size would be the same as diff_stack
+#        #multiply by is_stem_mat to crudely remove the noises (false positive) outside of is_stem_mat2
     
     final_stack1 = np.ndarray(bin_stack.shape, dtype=np.float32)
     has_embolism = np.zeros(bin_stack.shape[0])#1: that img is predicted to have embolism
@@ -187,8 +184,11 @@ if match:
         rect_height_th = 0.02#200/959
         cc_rect_th = 0.35#ALCLAT1_leaf img_idx=167 true emb part:0.34, img_idx=73(false positive part:0.36)
     else:
+        is_stem_mat2 = np.ones(bin_stack.shape)
         area_th = 1
         area_th2 = 3#10
+        c1_sz = max(round(25/646*img_ncol),1)
+        d1_sz = max(round(10/646*img_ncol),1)
         final_area_th = 78
         shift_th = 0.06#0.05
         density_th = 0.4
@@ -200,11 +200,21 @@ if match:
     
     bin_stem_stack = bin_stack*is_stem_mat2
     '''1st stage'''
-    for img_idx in range(0, bin_stack.shape[0]):
-        stem_area = np.sum(is_stem_mat2[img_idx,:,:])
-        final_stack1[img_idx,:,:] = find_emoblism_by_contour(bin_stem_stack,img_idx,stem_area = stem_area,final_area_th = final_area_th,
-                                                    area_th=area_th, area_th2=area_th2,ratio_th=ratio_th,e2_sz=1,o2_sz=2,cl2_sz=2,
-                                                    plot_interm=False,shift_th=shift_th,density_th=density_th,num_px_th=num_px_th)
+    if is_stem==True:
+        filter_stack = median_filter_stack(is_stem_mat2*th_stack,5)#5 is better than max(round(5/646*img_ncol),1) for cas2.2_Stem
+        print("median filter done")
+        for img_idx in range(0, bin_stack.shape[0]):
+            stem_area = np.sum(is_stem_mat2[img_idx,:,:])
+            final_stack1[img_idx,:,:] = find_emoblism_by_filter_contour(bin_stem_stack,filter_stack,img_idx,stem_area = stem_area,final_area_th = final_area_th,
+                                                        area_th=area_th, area_th2=area_th2,ratio_th=ratio_th,e2_sz=1,o2_sz=2,cl2_sz=2,c1_sz=c1_sz,d1_sz=d1_sz,
+                                                        plot_interm=False,shift_th=shift_th,density_th=density_th,num_px_th=num_px_th)
+            #TODO: closing/dilate param should depend on the width of stem (now it's depend on width of img)
+    else:
+        for img_idx in range(0, bin_stack.shape[0]):
+            stem_area = np.sum(is_stem_mat2[img_idx,:,:])
+            final_stack1[img_idx,:,:] = find_emoblism_by_contour(bin_stem_stack,img_idx,stem_area = stem_area,final_area_th = final_area_th,
+                                                        area_th=area_th, area_th2=area_th2,ratio_th=ratio_th,e2_sz=1,o2_sz=2,cl2_sz=2,
+                                                        plot_interm=False,shift_th=shift_th,density_th=density_th,num_px_th=num_px_th)
     print("1st stage done")
     '''2nd stage: reduce false positive'''
     if is_stem==True:
