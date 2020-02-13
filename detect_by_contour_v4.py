@@ -88,7 +88,7 @@ def extract_foreground(img_2d,chunk_folder, blur_radius=10.0,fg_threshold=0.1,ex
     
     not_stem = (smooth_img > fg_threshold)*1 
     
-    #expand the stem part a bit
+    #expand the stem part a bit by shrinking the not_stem
     unif_radius = blur_radius*expand_radius_ratio
     not_stem_exp =  to_binary(ndimage.uniform_filter(not_stem, size=unif_radius))
     
@@ -122,6 +122,53 @@ def extract_foreground(img_2d,chunk_folder, blur_radius=10.0,fg_threshold=0.1,ex
     if is_save==True:
         plt.imsave(chunk_folder + "/m3_is_stem.jpg",is_stem,cmap='gray')
     return(is_stem)#logical 2D array
+
+def extract_foregroundRGB(img_2d,chunk_folder, blur_radius=10.0,expand_radius_ratio=3,is_save=False):
+    '''
+    assume stem is more green than backgorund
+    '''
+    
+    #smoothing (gaussian filter)
+    smooth_img = ndimage.gaussian_filter(img_2d, blur_radius)
+    
+    is_stem_mat = (smooth_img > np.mean(img_2d))*1 
+    
+    #plot_gray_img(is_stem_mat)#1(white) for stem part
+    if is_save==True:
+        plt.imsave(chunk_folder + "/m2_1_is_stem_mat_before_max_area.jpg",is_stem_mat,cmap='gray')
+    
+    num_cc_stem, mat_cc_stem = cv2.connectedComponents(is_stem_mat.astype(np.uint8))
+    unique_cc_stem_label = np.unique(mat_cc_stem) 
+    #list of areas
+    area = []
+    if unique_cc_stem_label.size > 1: #more than 1 area 
+        for cc_label_stem in unique_cc_stem_label[1:]:
+            area.append(np.sum(mat_cc_stem == cc_label_stem))
+    #real stem part
+    if area:
+        max_area = max(area)
+        for cc_label_stem in unique_cc_stem_label[1:]:
+            if np.sum(mat_cc_stem == cc_label_stem) < max_area:
+                mat_cc_stem[mat_cc_stem == cc_label_stem] = 0
+        is_stem_mat = is_stem_mat * mat_cc_stem
+    else:#no part is being selected as stem --> treat entire img as stem
+        is_stem_mat = is_stem_mat+1
+    
+    #expand the stem part a bit by shrinking the not_stem
+    not_stem = -is_stem_mat+1
+    unif_radius = blur_radius*expand_radius_ratio
+    not_stem_exp =  to_binary(ndimage.uniform_filter(not_stem, size=unif_radius))
+    
+    is_stem_mat = (not_stem_exp==0)#invert
+    
+    #plot_gray_img(is_stem+not_stem)#expansion
+    if is_save==True:
+        plt.imsave(chunk_folder+"/m2_expansion_foreground.jpg",is_stem_mat+not_stem,cmap='gray')
+    #plot_gray_img(is_stem)#1(white) for stem part
+    if is_save==True:
+        plot_gray_img(is_stem_mat)#1(white) for stem part
+        plt.imsave(chunk_folder + "/m3_is_stem_mat.jpg",is_stem_mat,cmap='gray')
+    return(is_stem_mat)#logical 2D array
 
 #############################################################################
 #    main function for detecting embolism
@@ -272,13 +319,24 @@ def find_emoblism_by_contour(bin_stack,img_idx,stem_area,final_area_th = 20000/2
             #    (connected component level)
             #    Discard connected components w/small density or area
             ################################################################################################
-            if np.sum(final_img)/stem_area > shift_th or np.sum(final_img) < final_area_th:
+            if np.sum(final_img)/stem_area > shift_th:
                 '''
                 percentage of embolism in the stem_area is too large
                 probably is false positive due to shifting of img (case: stem img_idx=66,67)
+                '''
+                if plot_interm==True:
+                    print("percentage of embolism in the stem_area is too large",np.sum(final_img)/stem_area,"> shift_th =",shift_th)
+                final_img = final_img * 0
+                return(final_img)
+
+            if np.sum(final_img) < final_area_th:
+                '''
                 remove false positive with really small sizes
                 '''
+                if plot_interm==True:
+                    print("embolism area is too small", np.sum(final_img),"< final_area_th =", final_area_th)
                 final_img = final_img * 0
+                return(final_img)
             
             
             #reduce false positive, discard those with small density
@@ -463,13 +521,24 @@ def find_emoblism_by_filter_contour(bin_stack,filter_stack,img_idx,stem_area,fin
             #    (connected component level)
             #    Discard connected components w/small density or area
             ################################################################################################
-            if np.sum(final_img)/stem_area > shift_th or np.sum(final_img) < final_area_th:
+            if np.sum(final_img)/stem_area > shift_th:
                 '''
                 percentage of embolism in the stem_area is too large
                 probably is false positive due to shifting of img (case: stem img_idx=66,67)
+                '''
+                if plot_interm==True:
+                    print("percentage of embolism in the stem_area is too large",np.sum(final_img)/stem_area,"> shift_th =",shift_th)
+                final_img = final_img * 0
+                return(final_img)
+
+            if np.sum(final_img) < final_area_th:
+                '''
                 remove false positive with really small sizes
                 '''
+                if plot_interm==True:
+                    print("embolism area is too small", np.sum(final_img),"< final_area_th =", final_area_th)
                 final_img = final_img * 0
+                return(final_img)
             
             
             #reduce false positive, discard those with small density
