@@ -670,7 +670,7 @@ def calc_metric(con_mat):
     con_fp = con_mat['Predict 1']['True 0']
     con_fn = con_mat['Predict 0']['True 1']
     
-    sens = con_tp/(con_tp+con_fn)#want sensitivity to be high (want fn to be low)
-    prec = con_tp/(con_tp+con_fp)#want precision to be high(fp small --> less labor afterwards)
-    acc = (con_tp+con_tn)/(con_tn+con_tp+con_fp+con_fn) #accuracy
+    sens = round(con_tp/(con_tp+con_fn)*100,2)#want sensitivity to be high (want fn to be low)
+    prec = round(con_tp/(con_tp+con_fp)*100,2)#want precision to be high(fp small --> less labor afterwards)
+    acc = round((con_tp+con_tn)/(con_tn+con_tp+con_fp+con_fn)*100,2)#accuracy
     return([('sensitivity',sens),('precision',prec),('accuracy',acc)])

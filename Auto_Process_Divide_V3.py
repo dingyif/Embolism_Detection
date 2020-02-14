@@ -14,6 +14,7 @@ from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emobl
 from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel,calc_metric
 from density import density_of_a_rect
 from detect_by_filter_fx import median_filter_stack
+import math
 
 folder_list = []
 has_tif = []
@@ -63,7 +64,7 @@ if match:
     print(f'Image Folder Name: {img_folder_name}')
 
     chunk_idx = 0#starts from 0
-    chunk_size = 200#process 600 images a time
+    chunk_size = 900#process 600 images a time
     #print('index: {}'.format(i))
     is_save = True
 
@@ -75,12 +76,12 @@ if match:
         sys.exit("Error: image folder name doesn't contain strings like stem or leaf")
     
     start_img_idx = 1+chunk_idx*(chunk_size-1)#real_start_img_idx+chunk_idx*(chunk_size-1)
-    end_img_idx = start_img_idx+chunk_size-1
+    end_img_idx = min(start_img_idx+chunk_size-1,len(img_paths))
  
     if is_save==True:
         #create a "folder" for saving resulting tif files such that next time when re-run this program,
         #the resulting tif file won't be viewed as the most recent modified tiff file
-        chunk_folder = os.path.join(img_folder,img_folder_name,'v6_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
+        chunk_folder = os.path.join(img_folder,img_folder_name,'v7_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
         if not os.path.exists(chunk_folder):#create new folder if not existed
             os.makedirs(chunk_folder)
         else:#empty the existing folder
@@ -158,9 +159,9 @@ if match:
             imgGarray=imgRGB_arr[:,:,1] #only look at G layer
             #put in the correct data structure
             if img_re_idx==0:
-                is_stem_mat2[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=3,is_save=True)
+                is_stem_mat2[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True)
             else:
-                is_stem_mat2[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=3)
+                is_stem_mat2[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=2)
             img_re_idx = img_re_idx + 1
         print("finish is_stem_mat2")
     
@@ -208,8 +209,9 @@ if match:
         num_px_th = 50
         ratio_th=35  
         final_area_th2 = 80
-        emb_freq_th = 5/349 #depends on which stages the photos are taken
+        emb_freq_th = 0.05#5/349=0.014#a2_stem #depends on which stages the photos are taken
         cc_th = 3
+        window_size = 200
     
     bin_stem_stack = bin_stack*is_stem_mat2
     '''1st stage'''
@@ -234,27 +236,28 @@ if match:
         '''
         Don't count as embolism if it keeps appearing (probably is plastic cover)
         '''
-        final_stack_sum = np.sum(final_stack1,axis=0)/255 #the number of times embolism has occurred in a pixel
-        #each pixel in final_stack is 0 or 255, hence we divide by 255 to make it more intuitive 
-        #plot_gray_img(final_stack_sum,"final_stack_sum")
-        not_emb_part = (final_stack_sum/(img_num-1) > emb_freq_th)
-        #plot_gray_img(not_emb_part,"not_emb_part")
-        num_cc_fss,mat_cc_fss = cv2.connectedComponents((final_stack_sum>cc_th).astype(np.uint8))
-        not_emb_cc = np.unique(not_emb_part*mat_cc_fss)
-        not_emb_mask = not_emb_part*0
-        if not_emb_cc.size > 1: #not only background
-            for not_emb_cc_label in not_emb_cc[1:]: #starts with "1", cuz "0" is for bkg
-                not_emb_mask = not_emb_mask + (mat_cc_fss == not_emb_cc_label)*1
-        plot_gray_img(not_emb_mask,"not_emb_mask")
-        if is_save==True:
-            plt.imsave(chunk_folder + "/not_emb_mask.jpg",not_emb_mask,cmap='gray')
-        not_emb_mask_exp = cv2.dilate(not_emb_mask.astype(np.uint8), np.ones((10,10),np.uint8),iterations = 1)#expand a bit
-        plot_gray_img(not_emb_mask_exp,"not_emb_mask_exp")
-        if is_save==True:
-            plt.imsave(chunk_folder + "/not_emb_mask_exp.jpg",not_emb_mask_exp,cmap='gray')
-        emb_cand_mask = -(not_emb_mask_exp-1)#inverse, switch 0 and 1
-        #plot_gray_img(emb_cand_mask,"emb_cand_mask")
-        final_stack = np.repeat(emb_cand_mask[np.newaxis,:,:],img_num-1,0)*final_stack1
+        final_stack= np.zeros(bin_stack.shape)
+        window_idx_max = math.ceil(bin_stack.shape[0]/window_size)
+        for window_idx in range(0,window_idx_max):
+            window_start_idx = window_idx*window_size
+            window_end_idx = min((window_idx+1)*window_size,(end_img_idx-1))
+            current_window_size = window_end_idx-window_start_idx#img_num mod window_size might not be 0 
+            
+            substack = np.sum(final_stack1[window_start_idx:window_end_idx],axis=0)/255
+            #the number of times embolism has occurred in a pixel
+            #each pixel in final_stack is 0 or 255, hence we divide by 255 to make it more intuitive 
+            #plot_gray_img(final_stack_sum,"final_stack_sum")
+            not_emb_mask = (substack/current_window_size > emb_freq_th)*(substack>cc_th)
+            #plot_gray_img(not_emb_mask,str(window_idx)+"_not_emb_mask")
+            if is_save==True:
+                plt.imsave(chunk_folder + "/"+str(window_idx)+"_not_emb_mask.jpg",not_emb_mask,cmap='gray')
+            not_emb_mask_exp = cv2.dilate(not_emb_mask.astype(np.uint8), np.ones((10,10),np.uint8),iterations = 1)#expand a bit
+            plot_gray_img(not_emb_mask_exp,str(window_idx)+"_not_emb_mask_exp")
+            if is_save==True:
+                plt.imsave(chunk_folder + "/"+str(window_idx)+"_not_emb_mask_exp.jpg",not_emb_mask_exp,cmap='gray')
+            emb_cand_mask = -(not_emb_mask_exp-1)#inverse, switch 0 and 1
+            #plot_gray_img(emb_cand_mask,"emb_cand_mask")
+            final_stack[window_start_idx:window_end_idx,:,:] = np.repeat(emb_cand_mask[np.newaxis,:,:],current_window_size,0)*final_stack1[window_start_idx:window_end_idx,:,:]
         
         #treat whole img as no emb, if the number of embolized pixels is too small in an img
         num_emb_each_img = np.sum(np.sum(final_stack/255,axis=2),axis=1)#the number of embolized pixels in each img
