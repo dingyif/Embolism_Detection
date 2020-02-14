@@ -25,7 +25,7 @@ img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
-img_folder = all_folders_dir[34]
+img_folder = all_folders_dir[30]
 
 #Need to process c folder
 #img_folder_c = all_folders_dir[14:]
@@ -64,7 +64,7 @@ if match:
     print(f'Image Folder Name: {img_folder_name}')
 
     chunk_idx = 0#starts from 0
-    chunk_size = 900#process 600 images a time
+    chunk_size = 100#process 600 images a time
     #print('index: {}'.format(i))
     is_save = True
 
@@ -200,8 +200,8 @@ if match:
         #is_stem_mat2 = np.ones(bin_stack.shape)
         area_th = 1
         area_th2 = 3#10
-        c1_sz = max(round(25/646*img_ncol),1)
-        d1_sz = max(round(10/646*img_ncol),1)
+        c1_sz = max(round(25/646*max(img_ncol,img_nrow)),1)#in case img is flipped: in2_stem
+        d1_sz = max(round(10/646*max(img_ncol,img_nrow)),1)
         final_area_th = 78
         shift_th = 0.3#(has to be > 0.05 for a2_stem img_idx=224; has to > 0.19 for c4_stem img_idx=39; has to <0.29 for a4_stem img_idx=5; but has to be <0.19 for a4_stem img_idx=1
         #TODO: don't use shift_th, but use img_sum?
