@@ -136,7 +136,7 @@ if match:
     
     if is_stem==True:
 #        is_stem_mat = extract_foreground(mean_img,chunk_folder,expand_radius_ratio=8,is_save=True)
-#        '''
+#        
 #        the above is_stem_mat might be too big
 #        (one matrix that determines whether it's stem for all images)
 #        for each img, 
@@ -144,7 +144,7 @@ if match:
 #            --> threshold by mean of each image to get another estimate of whether 
 #            it's stem or not for each img
 #            --> then intersect with is_stem_mat, to get final the final is_stem_mat2 
-#        '''
+#        
 #        mean_each_img = np.mean(np.mean(img_stack,axis=2),axis=1)#mean of each image
 #        mean_each_stack = np.repeat(mean_each_img[:,np.newaxis],img_stack.shape[1],1)
 #        mean_each_stack = np.repeat(mean_each_stack[:,:,np.newaxis],img_stack.shape[2],2) 
@@ -361,10 +361,10 @@ if match:
 
     F_positive = os.path.join(chunk_folder,'false_positive')
     F_negative = os.path.join(chunk_folder,'false_negative')
-    T_negative = os.path.join(chunk_folder,'true_positive')
+    T_positive = os.path.join(chunk_folder,'true_positive')
     if is_save == True:
         #create/empty folder
-        con_output_path = [F_positive,F_negative,T_negative]
+        con_output_path = [F_positive,F_negative,T_positive]
         for foldername in con_output_path:
             if not os.path.exists(foldername):#create new folder if not existed
                 os.makedirs(foldername)
