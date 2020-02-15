@@ -616,6 +616,61 @@ def add_img_info_to_stack(img_stack,img_paths):
 def img_contain_emb(img_stack):
     return( np.any(np.any(img_stack,axis=2),axis=1)*1)#0 or 1
 
+def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_emb: list, blur_radius: float) -> list :
+    '''
+    we need to check the blur radius need to be set different for different situation or not. 
+    '''
+    t_emb_img_n = [ i for i, value in enumerate(true_has_emb) if value == 1]
+    pred_emb_img_n = [ i for i, value in enumerate(has_embolism) if value == 1]
+    f_pos = 0
+    f_neg = 0
+    t_pos = 0
+    t_neg = 0
+    #find all false postive img number and process all the clusters -> will be false positive cluster
+    #need to check pred_emb_img_n is always bigger or not.
+    diff_img_list = list(set(pred_emb_img_n) - set(t_emb_img_n))
+    for img_num in diff_img_list:
+        img_2d_fp = pred_stack[img_num,:,:]
+        #clustering process
+        smooth_fp_img = ndimage.gaussian_filter(img_2d_fp, sigma = blur_radius)
+        num_cc_fp, mat_cc_fp = cv2.connectedComponents(smooth_fp_img.astype(np.uint8))
+        #add up the false postive cluster
+        f_pos += num_cc_fp - 1
+        
+    #true_embolism_img, and predicted connected component
+    for index in t_emb_img_n:
+        img_2d_tp = true_stack[index,:,:]
+        img_2d_prd_p = pred_stack[index,:,:]
+        #smoothing (gaussian filter)
+        smooth_tp_img = ndimage.gaussian_filter(img_2d_tp, sigma = blur_radius)
+        #need to binary to this 
+        smooth_pred_p_img = ndimage.gaussian_filter(img_2d_prd_p, sigma = blur_radius)
+        #cc pred_p_img
+        num_cc_pred_p, mat_cc_pred_p = cv2.connectedComponents(smooth_pred_p_img.astype(np.uint8))
+        #clustering tp
+        num_cc_tp, mat_cc_tp = cv2.connectedComponents(smooth_tp_img.astype(np.uint8))
+        #binary the labelled cluster
+        t_pos += num_cc_tp - 1
+        lab_cl_bin_1 = to_binary(mat_cc_pred_p)
+        lab_cl_bin_2 = lab_cl_bin_1 * mat_cc_tp
+        #need to find a relationship between those
+        lcb2 = np.unique(lab_cl_bin_2)
+        
+        try: 
+            sens = round(t_pos/(t_pos+f_neg)*100,2)
+        except ZeroDivisionError:
+            print(f'sens denominator equals to {t_pos+f_neg}')
+        try:
+            prec = round(t_pos/(t_pos+f_pos)*100,2)
+        except ZeroDivisionError:
+            print(f'prec denominator equals to {t_pos+f_pos}')
+        try:
+            acc = round((t_pos+t_neg)/(t_neg+t_pos+f_pos+f_neg)*100,2)
+        except ZeroDivisionError:
+            print(f'acc denominator equals to {t_neg+t_pos+f_pos+f_neg}')
+            
+    return ([('sensitivity',sens),('precision',prec),('accuracy',acc)])
+
 def confusion_mat_img(has_embolism,true_has_emb):
     #false positive
     fp_idx = np.where(has_embolism>true_has_emb)[0]
