@@ -663,15 +663,15 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
         #binary the labelled cluster
         lab_cl_bin_1 = to_binary(mat_cc_pred_p)
         lab_cl_bin_2 = lab_cl_bin_1 * mat_cc_tp
-        #need to find a relationship between those
+        num_cc_lcb2 = len(np.unique(lab_cl_bin_2))
         
         
-        if len(np.unique(mat_cc_pred_p))-len(np.unique(mat_cc_tp))>0:
-            f_pos += len(np.unique(mat_cc_pred_p))-len(np.unique(mat_cc_tp))
-        if len(np.unique(lab_cl_bin_2))>1: # not just background
-            t_pos += len(np.unique(lab_cl_bin_2))-1
-        if len(np.unique(mat_cc_tp))-len(np.unique(lab_cl_bin_2))>0:
-            f_neg += len(np.unique(mat_cc_tp))-len(np.unique(lab_cl_bin_2))
+        if num_cc_pred_p-num_cc_tp>0:
+            f_pos += num_cc_pred_p-num_cc_tp
+        if num_cc_lcb2 >1: # not just background
+            t_pos += num_cc_lcb2 -1
+        if num_cc_tp-num_cc_lcb2 >0:
+            f_neg += num_cc_tp-num_cc_lcb2 
             
     con_mat = np.ndarray((2,2), dtype=np.float32)
     column_names = ['Predict 0', 'Predict 1']
