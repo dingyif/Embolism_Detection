@@ -585,7 +585,7 @@ def add_img_info_to_img(img_idx,img_stack,img_paths,img_folder):
 
 #add_img_info_to_img(231,final_combined_inv)
     
-def add_img_info_to_stack(img_stack,img_paths):    
+def add_img_info_to_stack(img_stack,img_paths,start_img_idx):    
     font                   = cv2.FONT_HERSHEY_SIMPLEX
     bottomLeftCornerOfText = (10,50)
     fontScale              = 1
@@ -596,13 +596,14 @@ def add_img_info_to_stack(img_stack,img_paths):
     
     for img_idx in range(0,img_stack.shape[0]):
         one_img_arr = stack_cp[img_idx,:,:]
-        cv2.putText(one_img_arr,"Image "+str(img_idx+1)+" - "+str(img_idx+2),bottomLeftCornerOfText, font, 
+        img_ori_idx = img_idx+(start_img_idx-1)
+        cv2.putText(one_img_arr,"Image "+str(img_ori_idx+1)+" - "+str(img_ori_idx+2),bottomLeftCornerOfText, font, 
             fontScale,fontColor,lineType)
-        cv2.putText(one_img_arr,os.path.split(img_paths[img_idx])[1],(10,90), font, 
+        cv2.putText(one_img_arr,os.path.split(img_paths[img_ori_idx])[1],(10,90), font, 
             0.7,fontColor,lineType)
         cv2.putText(one_img_arr,"to",(100,130), font, 
             0.7,fontColor,lineType)
-        cv2.putText(one_img_arr,os.path.split(img_paths[img_idx+1])[1],(10,170), font, 
+        cv2.putText(one_img_arr,os.path.split(img_paths[img_ori_idx+1])[1],(10,170), font, 
             0.7,fontColor,lineType)
         #cv2.imwrite(img_folder +'/out.jpg', one_img_arr)
     return(stack_cp)
@@ -618,7 +619,7 @@ def img_contain_emb(img_stack):
 
 def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_emb: list, blur_radius: float) -> list :
     '''
-    we need to check the blur radius need to be set different for different situation or not. 
+    we need to check the blur radius need to be set different for different situation or not.
     '''
     t_emb_img_n = [ i for i, value in enumerate(true_has_emb) if value == 1]
     pred_emb_img_n = [ i for i, value in enumerate(has_embolism) if value == 1]
@@ -628,7 +629,7 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
     t_neg = 0
     #find all false postive img number and process all the clusters -> will be false positive cluster
     #need to check pred_emb_img_n is always bigger or not.
-    diff_img_list = list(set(pred_emb_img_n) - set(t_emb_img_n))
+    diff_img_list = list(set(pred_emb_img_n) - set(t_emb_img_n))#look at false positive at images level
     for img_num in diff_img_list:
         img_2d_fp = pred_stack[img_num,:,:]
         #clustering process
@@ -670,6 +671,7 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
             print(f'acc denominator equals to {t_neg+t_pos+f_pos+f_neg}')
             
     return ([('sensitivity',sens),('precision',prec),('accuracy',acc)])
+
 
 def confusion_mat_img(has_embolism,true_has_emb):
     #false positive

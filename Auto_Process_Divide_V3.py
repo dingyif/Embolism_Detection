@@ -25,7 +25,7 @@ img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
-img_folder = all_folders_dir[30]
+img_folder = all_folders_dir[34]
 
 #Need to process c folder
 #img_folder_c = all_folders_dir[14:]
@@ -63,8 +63,8 @@ if match:
     img_folder_name = os.path.split(img_folder)[1]
     print(f'Image Folder Name: {img_folder_name}')
 
-    chunk_idx = 0#starts from 0
-    chunk_size = 100#process 600 images a time
+    chunk_idx = 1#starts from 0
+    chunk_size = 200#process 600 images a time
     #print('index: {}'.format(i))
     is_save = True
 
@@ -81,7 +81,7 @@ if match:
     if is_save==True:
         #create a "folder" for saving resulting tif files such that next time when re-run this program,
         #the resulting tif file won't be viewed as the most recent modified tiff file
-        chunk_folder = os.path.join(img_folder,img_folder_name,'v7_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
+        chunk_folder = os.path.join(img_folder,img_folder_name,'v8_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
         if not os.path.exists(chunk_folder):#create new folder if not existed
             os.makedirs(chunk_folder)
         else:#empty the existing folder
@@ -205,7 +205,7 @@ if match:
         final_area_th = 78
         shift_th = 0.3#(has to be > 0.05 for a2_stem img_idx=224; has to > 0.19 for c4_stem img_idx=39; has to <0.29 for a4_stem img_idx=5; but has to be <0.19 for a4_stem img_idx=1
         #TODO: don't use shift_th, but use img_sum?
-        density_th = 0.4
+        density_th = 0.4#<0.395 for cas5_stem
         num_px_th = 50
         ratio_th=35  
         final_area_th2 = 80
@@ -240,7 +240,8 @@ if match:
         window_idx_max = math.ceil(bin_stack.shape[0]/window_size)
         for window_idx in range(0,window_idx_max):
             window_start_idx = window_idx*window_size
-            window_end_idx = min((window_idx+1)*window_size,(end_img_idx-1))
+            window_end_idx = min((window_idx+1)*window_size,(end_img_idx-start_img_idx-1))
+            #"-1": because final_stack.shape[0] = img_stack.shape[0]-1, "-start_img_idx": because start_img_idx might not start at 0
             current_window_size = window_end_idx-window_start_idx#img_num mod window_size might not be 0 
             
             substack = np.sum(final_stack1[window_start_idx:window_end_idx],axis=0)/255
@@ -340,7 +341,7 @@ if match:
     final_combined = np.concatenate(combined_list,axis=2)
     final_combined_inv =  -final_combined+255 #invert 0 and 255 s.t. background becomes white
 
-    final_combined_inv_info = add_img_info_to_stack(final_combined_inv,img_paths)
+    final_combined_inv_info = add_img_info_to_stack(final_combined_inv,img_paths,start_img_idx)
     if is_save==True:
         tiff.imsave(chunk_folder+'/combined_4.tif', final_combined_inv_info)
         print("saved combined_4.tif")
@@ -373,13 +374,13 @@ if match:
                 os.makedirs(foldername)#create
         #save images into false_positive, false_negative, true_positive subfolders
         for i in con_img_list[1]:
-            plt.imsave(chunk_folder + "/false_positive/"+str(i)+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
+            plt.imsave(chunk_folder + "/false_positive/"+str(i+(start_img_idx-1))+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
         
         for i in con_img_list[2]:
-            plt.imsave(chunk_folder + "/false_negative/"+str(i)+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
+            plt.imsave(chunk_folder + "/false_negative/"+str(i+(start_img_idx-1))+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
         
         for i in con_img_list[3]:
-            plt.imsave(chunk_folder + "/true_positive/"+str(i)+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
+            plt.imsave(chunk_folder + "/true_positive/"+str(i+(start_img_idx-1))+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
         #but there could still be cases where there are false positive pixels in true positive img
     con_df_px = confusion_mat_pixel(final_stack,true_mask)
     #print(con_df_px)
@@ -393,9 +394,9 @@ if match:
         f.write(str("\n\n"))
         f.write(str(con_img_list[0]))
         f.write(str("\n\n"))
-        f.write(f'false positive img index: {con_img_list[1]}')
+        f.write(f'false positive img index: {con_img_list[1]+(start_img_idx-1)}')
         f.write(str("\n\n"))
-        f.write(f'false negative img index: {con_img_list[2]}')
+        f.write(f'false negative img index: {con_img_list[2]+(start_img_idx-1)}')
         f.write(str("\n\n"))
         f.write('pixel level metric:\n')
         f.write(str(metrix_px))
