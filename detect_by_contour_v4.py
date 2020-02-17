@@ -620,6 +620,7 @@ def img_contain_emb(img_stack):
 def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_emb: list, blur_radius: float) -> list :
     '''
     we need to check the blur radius need to be set different for different situation or not.
+    confusion matrix at cluster level
     '''
     t_emb_img_n = [ i for i, value in enumerate(true_has_emb) if value == 1]
     pred_emb_img_n = [ i for i, value in enumerate(has_embolism) if value == 1]
@@ -627,9 +628,15 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
     f_neg = 0
     t_pos = 0
     t_neg = 0
+    
+    #NOT SURE: how do you define true negative at cluster level? same as it at img_level?
+    tn_idx = np.where((has_embolism==true_has_emb)*(true_has_emb==0))[0]
+    t_neg = len(tn_idx)
+    
     #find all false postive img number and process all the clusters -> will be false positive cluster
     #need to check pred_emb_img_n is always bigger or not.
-    diff_img_list = list(set(pred_emb_img_n) - set(t_emb_img_n))#look at false positive at images level
+    #look at false positive imgs at images level (i.e. every img predicted w/emb, but true has no emb)
+    diff_img_list = list(set(pred_emb_img_n) - set(t_emb_img_n))
     for img_num in diff_img_list:
         img_2d_fp = pred_stack[img_num,:,:]
         #clustering process
@@ -637,7 +644,8 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
         num_cc_fp, mat_cc_fp = cv2.connectedComponents(smooth_fp_img.astype(np.uint8))
         #add up the false postive cluster
         f_pos += num_cc_fp - 1
-        
+    
+    #look at true positive at images level
     #true_embolism_img, and predicted connected component
     for index in t_emb_img_n:
         img_2d_tp = true_stack[index,:,:]
@@ -650,27 +658,30 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
         num_cc_pred_p, mat_cc_pred_p = cv2.connectedComponents(smooth_pred_p_img.astype(np.uint8))
         #clustering tp
         num_cc_tp, mat_cc_tp = cv2.connectedComponents(smooth_tp_img.astype(np.uint8))
+        #plot_gray_img(mat_cc_pred_p>0)
+        #plot_gray_img(mat_cc_tp>0)
         #binary the labelled cluster
-        t_pos += num_cc_tp - 1
         lab_cl_bin_1 = to_binary(mat_cc_pred_p)
         lab_cl_bin_2 = lab_cl_bin_1 * mat_cc_tp
         #need to find a relationship between those
-        lcb2 = np.unique(lab_cl_bin_2)
         
-        try: 
-            sens = round(t_pos/(t_pos+f_neg)*100,2)
-        except ZeroDivisionError:
-            print(f'sens denominator equals to {t_pos+f_neg}')
-        try:
-            prec = round(t_pos/(t_pos+f_pos)*100,2)
-        except ZeroDivisionError:
-            print(f'prec denominator equals to {t_pos+f_pos}')
-        try:
-            acc = round((t_pos+t_neg)/(t_neg+t_pos+f_pos+f_neg)*100,2)
-        except ZeroDivisionError:
-            print(f'acc denominator equals to {t_neg+t_pos+f_pos+f_neg}')
+        
+        if len(np.unique(mat_cc_pred_p))-len(np.unique(mat_cc_tp))>0:
+            f_pos += len(np.unique(mat_cc_pred_p))-len(np.unique(mat_cc_tp))
+        if len(np.unique(lab_cl_bin_2))>1: # not just background
+            t_pos += len(np.unique(lab_cl_bin_2))-1
+        if len(np.unique(mat_cc_tp))-len(np.unique(lab_cl_bin_2))>0:
+            f_neg += len(np.unique(mat_cc_tp))-len(np.unique(lab_cl_bin_2))
             
-    return ([('sensitivity',sens),('precision',prec),('accuracy',acc)])
+    con_mat = np.ndarray((2,2), dtype=np.float32)
+    column_names = ['Predict 0', 'Predict 1']
+    row_names    = ['True 0','True 1']
+    con_mat[0,0] = t_neg
+    con_mat[1,1] = t_pos
+    con_mat[0,1] = f_pos
+    con_mat[1,0] = f_neg
+    con_df = pd.DataFrame(con_mat, columns=column_names, index=row_names)
+    return(con_df)
 
 
 def confusion_mat_img(has_embolism,true_has_emb):
@@ -722,12 +733,21 @@ def confusion_mat_pixel(pred_stack,true_stack):
     return(con_df)
 
 def calc_metric(con_mat):
-    con_tn = con_mat['Predict 0']['True 0']
-    con_tp = con_mat['Predict 1']['True 1']
-    con_fp = con_mat['Predict 1']['True 0']
-    con_fn = con_mat['Predict 0']['True 1']
+    t_neg = con_mat['Predict 0']['True 0']
+    t_pos = con_mat['Predict 1']['True 1']
+    f_pos = con_mat['Predict 1']['True 0']
+    f_neg = con_mat['Predict 0']['True 1']
     
-    sens = round(con_tp/(con_tp+con_fn)*100,2)#want sensitivity to be high (want fn to be low)
-    prec = round(con_tp/(con_tp+con_fp)*100,2)#want precision to be high(fp small --> less labor afterwards)
-    acc = round((con_tp+con_tn)/(con_tn+con_tp+con_fp+con_fn)*100,2)#accuracy
+    try: 
+        sens = round(t_pos/(t_pos+f_neg)*100,2)#want sensitivity to be high (want fn to be low)
+    except ZeroDivisionError:
+        print(f'sens denominator equals to {t_pos+f_neg}')
+    try:
+        prec = round(t_pos/(t_pos+f_pos)*100,2)#want precision to be high(fp small --> less labor afterwards)
+    except ZeroDivisionError:
+        print(f'prec denominator equals to {t_pos+f_pos}')
+    try:
+        acc = round((t_pos+t_neg)/(t_neg+t_pos+f_pos+f_neg)*100,2)#accuracy
+    except ZeroDivisionError:
+        print(f'acc denominator equals to {t_neg+t_pos+f_pos+f_neg}')
     return([('sensitivity',sens),('precision',prec),('accuracy',acc)])

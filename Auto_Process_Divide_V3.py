@@ -11,7 +11,7 @@ import sys
 from detect_by_contour_v4 import plot_gray_img, to_binary,plot_img_sum
 from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB
 from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
-from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel,calc_metric
+from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric
 from density import density_of_a_rect
 from detect_by_filter_fx import median_filter_stack
 import math
@@ -388,6 +388,9 @@ if match:
     #print(con_df_px/total_num_pixel)
     metrix_img = calc_metric(con_img_list[0])
     metrix_px = calc_metric(con_df_px)
+    
+    con_df_cluster = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10)
+    metrix_cluster = calc_metric(con_df_cluster)
     with open (chunk_folder + '/confusion_mat_file.txt',"w") as f:
         f.write('img level metric:\n')
         f.write(str(metrix_img))
@@ -404,6 +407,12 @@ if match:
         f.write(f'con_df_px: \n {con_df_px}')
         f.write(str("\n\n"))
         f.write(f'probability of pix: \n {(con_df_px/total_num_pixel)}')
+        f.write(str("\n\n"))
+        f.write('cluster level metric:\n')
+        f.write(str(metrix_cluster))
+        f.write(str("\n\n"))
+        f.write(f'con_df_cluster: \n {con_df_cluster}')
+        f.write(str("\n\n"))
         
 
 else:
