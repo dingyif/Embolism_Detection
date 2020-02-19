@@ -8,7 +8,7 @@ import cv2
 import os,shutil#for creating/emptying folders
 import re
 import sys
-from detect_by_contour_v4 import plot_gray_img, to_binary,plot_img_sum
+from detect_by_contour_v4 import plot_gray_img, to_binary,plot_img_sum, plot_overlap_sum
 from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB, detect_bubble
 from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
 from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric
@@ -153,17 +153,18 @@ if match:
 #        is_stem_mat2 = bigger_than_mean[:-1,:,:]*(is_stem_mat*1)
 #        #drop the last img s.t. size would be the same as diff_stack
 #        #multiply by is_stem_mat to crudely remove the noises (false positive) outside of is_stem_mat2
-        is_stem_mat2 = np.ones(bin_stack.shape)
+        is_stem_mat = np.ones(img_stack.shape)
         img_re_idx = 0
-        for filename in img_paths[(start_img_idx-1):(end_img_idx-1)]: #original img: 958 rowsx646 cols
+        for filename in img_paths[(start_img_idx-1):end_img_idx]: #original img: 958 rowsx646 cols
             imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
             imgGarray=imgRGB_arr[:,:,1] #only look at G layer
             #put in the correct data structure
             if img_re_idx==0:
-                is_stem_mat2[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True)
+                is_stem_mat[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True)
             else:
-                is_stem_mat2[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=2)
+                is_stem_mat[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=2)
             img_re_idx = img_re_idx + 1
+        is_stem_mat2 = is_stem_mat[:-1,:,:]#drop the last img s.t. size would be the same as diff_stack
         print("finish is_stem_mat2")
         
     
@@ -227,13 +228,18 @@ if match:
         bubble_stack,has_bubble_vec= detect_bubble(filter_stack)
         
         if is_save==True:
-            combined_list_bubble = ((bubble_stack*255).astype(np.uint8),(filter_stack/np.max(filter_stack)*255).astype(np.uint8),(bin_stack*255).astype(np.uint8))
+            filter_norm = filter_stack/np.repeat(np.repeat(np.max(np.max(filter_stack,2),1)[:,np.newaxis],img_nrow,1)[:,:,np.newaxis],img_ncol,2)#normalize for displaying
+            combined_list_bubble = ((bubble_stack*255).astype(np.uint8),(filter_norm*255).astype(np.uint8),(bin_stack*255).astype(np.uint8))
             bubble_combined = np.concatenate(combined_list_bubble,axis=2)
             bubble_combined_inv =  -bubble_combined+255#so that bubbles: white --> black, bgd: black-->white
             tiff.imsave(chunk_folder+'/bubble_stack.tif', bubble_combined_inv)
             print("saved bubble_stack.tif")
         else:
             print("finish bubble_stack")
+        '''
+        shift detection
+        '''
+        plot_overlap_sum(is_stem_mat, img_folder_name ,chunk_folder, is_save = True)
         
         
         for img_idx in range(0, bin_stack.shape[0]):

@@ -40,10 +40,14 @@ def plot_img_sum(img_3d,title_str,img_folder,is_save=False):
 #############################################################################
 #    function for plotting overlap sum
 #############################################################################
-def plot_overlap_sum(is_stem_mat2, title_str ,chunk_folder, is_save = False):
+def plot_overlap_sum(is_stem_mat, title_str ,chunk_folder, is_save = False):
     #title_str = img_folder_name
-    diff_is_stem_mat2 = is_stem_mat2[1:,:,:] - is_stem_mat2[:-1,:,:]
-    prop = np.sum(np.sum(abs(diff_is_stem_mat2),2),1)/np.sum(np.sum(abs(is_stem_mat2[:-1,:,:]),2),1)
+    diff_is_stem_mat = is_stem_mat[1:,:,:] - is_stem_mat[:-1,:,:]
+    prop = np.sum(np.sum(abs(diff_is_stem_mat),2),1)/np.sum(np.sum(abs(is_stem_mat[:-1,:,:]),2),1)
+    #difference/previous img area --> if not close to 0 --> shifting
+    sum_is_stem_mat = is_stem_mat[1:,:,:] + is_stem_mat[:-1,:,:]
+    prop = np.sum(np.sum((sum_is_stem_mat==2),2),1)/np.sum(np.sum((sum_is_stem_mat>=1),2),1)
+    #AND(=overlap)/OR --> if not close to 1 --> shifting 
     plt.figure()
     plt.plot(range(len(prop)),prop)
     plt.ylabel("portion of overlap area")
