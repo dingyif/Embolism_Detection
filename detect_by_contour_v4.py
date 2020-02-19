@@ -40,8 +40,10 @@ def plot_img_sum(img_3d,title_str,img_folder,is_save=False):
 #############################################################################
 #    function for plotting overlap sum
 #############################################################################
-def plot_overlap_sum(img_3d, title_str = img_folder_name ,chunk_folder, is_save = False):
+def plot_overlap_sum(is_stem_mat2, title_str ,chunk_folder, is_save = False):
+    #title_str = img_folder_name
     diff_is_stem_mat2 = is_stem_mat2[1:,:,:] - is_stem_mat2[:-1,:,:]
+    #prop = np.sum(np.sum(abs(diff_is_stem_mat2),2),1)/np.sum(np.sum(abs(is_stem_mat2[:-1,:,:]),2),1)
     diff_shape = diff_is_stem_mat2.shape()
     count_num_2 = np.array([]) ; count_num_1 = np.array([])
     for i in Diff_shape[0]:
