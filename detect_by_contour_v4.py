@@ -19,7 +19,7 @@ import os,shutil#for creating/emptying folders
 import sys#for printing error message
 import gc
 import density#self-written density.py
-
+from collections import Counter#for count 1,2 in overlap mat
 #############################################################################
 #    Sanity check:
 #    see if the sum of pixel values in an image of diff_pos_stack
@@ -37,6 +37,29 @@ def plot_img_sum(img_3d,title_str,img_folder,is_save=False):
     # x-axis= image index. y-axis=sum of each img
     return(sum_of_img)
 
+#############################################################################
+#    function for plotting overlap sum
+#############################################################################
+def plot_overlap_sum(img_3d, title_str = img_folder_name ,chunk_folder, is_save = False):
+    diff_is_stem_mat2 = is_stem_mat2[1:,:,:] - is_stem_mat2[:-1,:,:]
+    diff_shape = diff_is_stem_mat2.shape()
+    count_num_2 = np.array([]) ; count_num_1 = np.array([])
+    for i in Diff_shape[0]:
+        diff = Diff_is_stem_mat2[i,:,:]
+        counted_num = Counter([num for sublist in diff for num in sublist])
+        count_num_2 = np.append(count_num_2, counted_num[2])
+        count_num_1 = np.append(count_num_1, counted_num[1])
+        prop = count_2/(count_1+count_2)
+    plt.figure()
+    plt.plot(range(len(prop)),prop)
+    plt.ylabel("portion of overlap area")
+    plt.xlabel("image relative index")
+    plt.title(title_str)
+
+    if is_save == True:
+        plt.savefig(chunk_folder + "/m1_overlap_area_hist_img.jpg",bbox_inches='tight')
+    return(prop)
+    
 #############################################################################
 #    function for plotting
 #############################################################################
@@ -747,7 +770,7 @@ def calc_metric(con_mat):
     f_neg = con_mat['Predict 0']['True 1']
     
     try: 
-        sens = round(t_pos/(t_pos+f_neg)*100,2)#want sensitivity to be high (want fn to be low)
+        sens = round(t_pos/(t_pos+f_neg)*100.0,2)#want sensitivity to be high (want fn to be low)
     except ZeroDivisionError:
         print(f'sens denominator equals to {t_pos+f_neg}')
     try:
