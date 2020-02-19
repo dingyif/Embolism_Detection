@@ -9,7 +9,7 @@ import os,shutil#for creating/emptying folders
 import re
 import sys
 from detect_by_contour_v4 import plot_gray_img, to_binary,plot_img_sum
-from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB
+from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB, detect_bubble
 from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
 from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric
 from density import density_of_a_rect
@@ -63,7 +63,7 @@ if match:
     img_folder_name = os.path.split(img_folder)[1]
     print(f'Image Folder Name: {img_folder_name}')
 
-    chunk_idx = 1#starts from 0
+    chunk_idx = 0#starts from 0
     chunk_size = 200#process 600 images a time
     #print('index: {}'.format(i))
     is_save = True
@@ -122,6 +122,7 @@ if match:
     #help to clip all positive px value to 1
     bin_stack = to_binary(th_stack)
     print("bin_stack done")
+    
     '''
     Foreground Background Segmentation
     for stem only, cuz there are clearly parts that are background (not stem)
@@ -164,6 +165,7 @@ if match:
                 is_stem_mat2[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=2)
             img_re_idx = img_re_idx + 1
         print("finish is_stem_mat2")
+        
     
     final_stack1 = np.ndarray(bin_stack.shape, dtype=np.float32)
     has_embolism = np.zeros(bin_stack.shape[0])#1: that img is predicted to have embolism
@@ -205,7 +207,7 @@ if match:
         final_area_th = 78
         shift_th = 0.3#(has to be > 0.05 for a2_stem img_idx=224; has to > 0.19 for c4_stem img_idx=39; has to <0.29 for a4_stem img_idx=5; but has to be <0.19 for a4_stem img_idx=1
         #TODO: don't use shift_th, but use img_sum?
-        density_th = 0.4#<0.395 for cas5_stem
+        density_th = 0.35#<0.395 for cas5_stem #<0.36 in4_stem img_idx=232
         num_px_th = 50
         ratio_th=35  
         final_area_th2 = 80
@@ -218,6 +220,22 @@ if match:
     if is_stem==True:
         filter_stack = median_filter_stack(is_stem_mat2*th_stack,5)#5 is better than max(round(5/646*img_ncol),1) for cas2.2_Stem
         print("median filter done")
+        
+        '''
+        bubble detection
+        '''
+        bubble_stack,has_bubble_vec= detect_bubble(filter_stack)
+        
+        if is_save==True:
+            combined_list_bubble = ((bubble_stack*255).astype(np.uint8),(filter_stack/np.max(filter_stack)*255).astype(np.uint8),(bin_stack*255).astype(np.uint8))
+            bubble_combined = np.concatenate(combined_list_bubble,axis=2)
+            bubble_combined_inv =  -bubble_combined+255#so that bubbles: white --> black, bgd: black-->white
+            tiff.imsave(chunk_folder+'/bubble_stack.tif', bubble_combined_inv)
+            print("saved bubble_stack.tif")
+        else:
+            print("finish bubble_stack")
+        
+        
         for img_idx in range(0, bin_stack.shape[0]):
             stem_area = np.sum(is_stem_mat2[img_idx,:,:])
             final_stack1[img_idx,:,:] = find_emoblism_by_filter_contour(bin_stem_stack,filter_stack,img_idx,stem_area = stem_area,final_area_th = final_area_th,
