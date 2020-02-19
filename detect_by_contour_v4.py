@@ -494,9 +494,6 @@ def find_emoblism_by_filter_contour(bin_stack,filter_stack,img_idx,stem_area,fin
                 for cc_label in unique_cc_label[1:]: #starts with "1", cuz "0" is for bkg
                     add_part = (mat_cc == cc_label)*bin_stack[img_idx,:,:]
                     area_cm2 = np.sum((mat_cc == cc_label)*contour_mask2)#number of pixels in contour_mask2 that are 1
-                    if plot_interm == True:
-                        #print("number of pixel added/area of that connected component in dilate_img",np.sum(add_part)/np.sum(mat_cc == cc_label))
-                        print(str(img_idx)+":"+str(np.sum(add_part)/area_cm2))
                     if np.sum(add_part)/area_cm2 < ratio_th:# and np.sum(add_part)/np.sum(mat_cc == cc_label)>0.19:
                         '''
                         1st condition
@@ -507,6 +504,11 @@ def find_emoblism_by_filter_contour(bin_stack,filter_stack,img_idx,stem_area,fin
                         crude way of discarding parts with low density
                         '''
                         final_mask = final_mask + add_part
+                        if plot_interm == True:
+                            print("[keep] ratio is small enough",np.sum(add_part)/area_cm2," < ratio_th=",ratio_th)
+                    else:
+                        if plot_interm == True:
+                            print("[discard] ratio is too big",np.sum(add_part)/area_cm2," >= ratio_th=",ratio_th)
                     
             final_img = np.copy(final_mask)
             if plot_interm == True:
@@ -552,16 +554,22 @@ def find_emoblism_by_filter_contour(bin_stack,filter_stack,img_idx,stem_area,fin
             unique_cc_label3 = np.unique(mat_cc3)
             if unique_cc_label3.size > 1: #not only background
                 for cc_label3 in unique_cc_label3[1:]: #starts with "1", cuz "0" is for bkg
-                    inside_cc3 = (mat_cc3 == cc_label3)*bin_stack[img_idx,:,:]
-                    if plot_interm == True:
-                        print("estimated of density",np.sum(inside_cc3)/np.sum(mat_cc3 == cc_label3))
-                        print("estimated number of pixels inside",np.sum(inside_cc3))
+                    inside_cc3 = (mat_cc3 == cc_label3)*bin_stack[img_idx,:,:]                        
                     #print(str(img_idx)+":"+str(np.sum(add_part)/area_cm2))
-                    if np.sum(inside_cc3)/np.sum(mat_cc3 == cc_label3)>density_th and np.sum(inside_cc3)>num_px_th :
+                    if np.sum(inside_cc3)/np.sum(mat_cc3 == cc_label3)<=density_th:
                         #discarding parts with low density
+                        if plot_interm==True:
+                            print("[discard] estimated of density",np.sum(inside_cc3)/np.sum(mat_cc3 == cc_label3),"< density_th=",density_th)
+                    elif np.sum(inside_cc3)<=num_px_th :
                         #discarding parts with small area ( ~ < 50 pixels) #!!! threshold for small area: depends on the distance btw the camera and the stem 
-                            
+                        if plot_interm==True:
+                            print("[discard] estimated number of pixels inside",np.sum(inside_cc3),"<=",num_px_th)
+                    else:
+                        if plot_interm==True:
+                            print("[keep] estimated of density",np.sum(inside_cc3)/np.sum(mat_cc3 == cc_label3),"estimated number of pixels inside",np.sum(inside_cc3))
                         final_mask3 = final_mask3 + inside_cc3
+                            
+                            
             if plot_interm == True:
                 plot_gray_img(final_mask3,str(img_idx)+"_final_mask3")
             final_img = final_mask3
@@ -751,3 +759,82 @@ def calc_metric(con_mat):
     except ZeroDivisionError:
         print(f'acc denominator equals to {t_neg+t_pos+f_pos+f_neg}')
     return([('sensitivity',sens),('precision',prec),('accuracy',acc)])
+
+def fill_holes(imInput, threshold):
+    """
+    The method used in this function is found from
+    https://www.learnopencv.com/filling-holes-in-an-image-using-opencv-python-c/
+
+    """
+
+    # Threshold.
+    th, thImg = cv2.threshold(imInput, threshold, 255, cv2.THRESH_BINARY_INV)
+    #bubbles: white contour, bgd:black
+
+    # Copy the thresholded image.
+    imFloodfill = thImg.copy()
+
+    # Get the mask.
+    h, w = thImg.shape[:2]
+    mask = np.zeros((h+2, w+2), np.uint8)
+
+    # Floodfill white from point (0, 0).
+    cv2.floodFill(imFloodfill, mask, (0,0), 255)
+    #space inside bubbles: black; bgd:white
+
+    # Invert the floodfilled image.
+    imFloodfillInv = 255-imFloodfill
+    #space inside white: black; bgd:black
+
+    # Combine the two images.
+    imOut = to_binary(thImg + imFloodfillInv)
+
+    return imOut
+
+def detect_bubble(input_stack,blur_radius=11,hough_param1=25,hough_param2=10, minRadius = 0, maxRadius = 40, dp=1):
+    '''
+    bubble detection using opencv
+    http://www.huyaoyu.com/technical/2017/12/13/bubble-detection-by-using-opencv.html
+    original img in the above ref: bubbles:black, bgd: white
+    '''
+    bubble_stack = np.zeros(input_stack.shape)
+    has_bubble_vec = np.zeros(input_stack.shape[0])
+    for img_idx in range(0,input_stack.shape[0]):
+        # Load the image.
+        gray_img = input_stack[img_idx,:,:]
+        #img_stack won't work: cuz stem itself would be considered as circles too
+        #th_stack won't work: cuz it'll only focus on where the value is high, but later on we'll work w/ binary imgs, so a lot of bubbles w/low pixel value in th_stack are not discovered
+#        blurred = cv2.GaussianBlur(gray_img.astype(np.uint8), (blur_radius, blur_radius), 0)
+#        plot_gray_img(blurred,"[detect_bubble]: Blurred")
+    
+#        # Fille the "holes" on the image.
+#        filled = fill_holes(blurred, np.quantile(blurred,0.8))
+#        #doesn't seem to work in our case, because the edge of our circle isn't connected completely
+#        # maybe can consider using it when gray_img only looks at is_stem_mat part 
+#        plot_gray_img(filled,"[detect_bubble]: Filled")
+    
+        # Find circles by the Hough transformation.
+        circles = cv2.HoughCircles(gray_img.astype(np.uint8), cv2.HOUGH_GRADIENT, dp=dp, minDist=10, param1 = hough_param1, param2 = hough_param2, minRadius = minRadius, maxRadius = maxRadius)
+        #dp – Inverse ratio of the accumulator resolution to the image resolution. For example, if dp=1 , the accumulator has the same resolution as the input image. If dp=2 , the accumulator has half as big width and height.
+        #param1 – First method-specific parameter. In case of CV_HOUGH_GRADIENT , it is the higher threshold of the two passed to the Canny() edge detector (the lower one is twice smaller).
+        #param2 – Second method-specific parameter. In case of CV_HOUGH_GRADIENT , it is the accumulator threshold for the circle centers at the detection stage. The smaller it is, the more false circles may be detected. Circles, corresponding to the larger accumulator values, will be returned first.
+        #Usually the function detects the centers of circles well. However, it may fail to find correct radii. 
+        
+        output_img = np.zeros(gray_img.shape)
+        # Draw circles on the original image.
+        if circles is not None:
+            for i in range(circles.shape[1]):
+                c = circles[0, i]
+    
+                cv2.circle( output_img, center=(c[0], c[1]), radius=c[2], color=(255, 255, 255), thickness=-2)
+                #negative thickness means filled circle
+                #print("i = %d, r = %f" % (i, c[2]))
+    
+            #cv2.imshow("Marked", gray_img)
+            #plot_gray_img(output_img)
+            bubble_stack[img_idx,:,:]=output_img/255 #0:bgd or 1:bubbles
+            has_bubble_vec[img_idx] = 1
+#        else:
+#            print(img_idx,": has no bubble")
+        
+    return bubble_stack,has_bubble_vec
