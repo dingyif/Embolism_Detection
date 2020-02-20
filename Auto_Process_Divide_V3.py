@@ -25,7 +25,7 @@ img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
-img_folder = all_folders_dir[34]
+img_folder = all_folders_dir[17]
 
 #Need to process c folder
 #img_folder_c = all_folders_dir[14:]
@@ -64,7 +64,7 @@ if match:
     print(f'Image Folder Name: {img_folder_name}')
 
     chunk_idx = 0#starts from 0
-    chunk_size = 200#process 600 images a time
+    chunk_size = 300#process 600 images a time
     #print('index: {}'.format(i))
     is_save = True
 
@@ -264,8 +264,8 @@ if match:
         window_idx_max = math.ceil(bin_stack.shape[0]/window_size)
         for window_idx in range(0,window_idx_max):
             window_start_idx = window_idx*window_size
-            window_end_idx = min((window_idx+1)*window_size,(end_img_idx-start_img_idx-1))
-            #"-1": because final_stack.shape[0] = img_stack.shape[0]-1, "-start_img_idx": because start_img_idx might not start at 0
+            window_end_idx = min((window_idx+1)*window_size,(end_img_idx-start_img_idx))
+            # "-start_img_idx": because start_img_idx might not start at 0
             current_window_size = window_end_idx-window_start_idx#img_num mod window_size might not be 0 
             
             substack = np.sum(final_stack1[window_start_idx:window_end_idx],axis=0)/255
@@ -368,7 +368,9 @@ if match:
     final_combined_inv_info = add_img_info_to_stack(final_combined_inv,img_paths,start_img_idx)
     if is_save==True:
         tiff.imsave(chunk_folder+'/combined_4.tif', final_combined_inv_info)
-        print("saved combined_4.tif")
+        tiff.imsave(chunk_folder+'/predict.tif',255-final_stack.astype(np.uint8))
+        tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
+        print("saved tif files")
     
     '''
     Confusion Matrix
