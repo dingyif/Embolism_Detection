@@ -3,35 +3,33 @@ from PIL import Image
 import glob
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import ndimage #for median filter,extract foreground
-import time #to time function performance
 import tifffile as tiff #for numpy array in tiff formate; read bioimage
-import pandas as pd
 import cv2
-import operator#for contour
 import os,shutil#for creating/emptying folders
 import re
 import sys
-from detect_by_contour_v4 import plot_img_sum, plot_gray_img, to_binary
-from detect_by_contour_v4 import add_img_info_to_img, add_img_info_to_stack
-from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour
-from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel
+from detect_by_contour_v4 import plot_gray_img, to_binary,plot_img_sum, plot_overlap_sum
+from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB, detect_bubble
+from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
+from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric
 from density import density_of_a_rect
+from detect_by_filter_fx import median_filter_stack
+import math
 
 folder_list = []
 has_tif = []
 no_tif =[]
-disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+#disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+disk_path = 'F:/Diane/Col/research/code/'
 img_folder_rel = os.path.join(disk_path,"Done", "Processed")
-#img_folder_rel = 'F:/Diane/Col/research/code/Done/Processed'
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
-#img_folder = all_folders_dir[1]
+img_folder = all_folders_dir[17]
 
 #Need to process c folder
-img_folder_c = all_folders_dir[14:]
-img_folder = img_folder_c[2]
+#img_folder_c = all_folders_dir[14:]
+#img_folder = img_folder_c[2]
 print(f'img folder name : {img_folder}')
 
 img_paths = sorted(glob.glob(img_folder + '/*.png'))
@@ -66,7 +64,7 @@ if match:
     print(f'Image Folder Name: {img_folder_name}')
 
     chunk_idx = 0#starts from 0
-    chunk_size = 600#process 600 images a time
+    chunk_size = 200#process 600 images a time
     #print('index: {}'.format(i))
     is_save = True
 
@@ -78,12 +76,12 @@ if match:
         sys.exit("Error: image folder name doesn't contain strings like stem or leaf")
     
     start_img_idx = 1+chunk_idx*(chunk_size-1)#real_start_img_idx+chunk_idx*(chunk_size-1)
-    end_img_idx = start_img_idx+chunk_size-1
+    end_img_idx = min(start_img_idx+chunk_size-1,len(img_paths))
  
     if is_save==True:
         #create a "folder" for saving resulting tif files such that next time when re-run this program,
         #the resulting tif file won't be viewed as the most recent modified tiff file
-        chunk_folder = os.path.join(img_folder,img_folder_name,str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
+        chunk_folder = os.path.join(img_folder,img_folder_name,'v8_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
         if not os.path.exists(chunk_folder):#create new folder if not existed
             os.makedirs(chunk_folder)
         else:#empty the existing folder
@@ -96,7 +94,7 @@ if match:
     for filename in img_paths[start_img_idx-1:end_img_idx]: #original img: 958 rowsx646 cols
         img=Image.open(filename).convert('L') #.convert('L'): gray-scale # 646x958
         img_array=np.float32(img) #convert from Image object to numpy array (black 0-255 white); 958x646
-        #pu in the correct data structure
+        #put in the correct data structure
         if img_re_idx == 0:
             img_nrow = img_array.shape[0]
             img_ncol = img_array.shape[1]
@@ -124,6 +122,7 @@ if match:
     #help to clip all positive px value to 1
     bin_stack = to_binary(th_stack)
     print("bin_stack done")
+    
     '''
     Foreground Background Segmentation
     for stem only, cuz there are clearly parts that are background (not stem)
@@ -137,23 +136,37 @@ if match:
             plt.imsave(chunk_folder + "/m1_mean_of_binary_img.jpg",mean_img,cmap='gray')
     
     if is_stem==True:
-        is_stem_mat = extract_foreground(mean_img,chunk_folder,expand_radius_ratio=8,is_save=True)
-        '''
-        the above is_stem_mat might be too big
-        (one matrix that determines whether it's stem for all images)
-        for each img, 
-            use the fact that stem is brighter than background from original img 
-            --> threshold by mean of each image to get another estimate of whether 
-            it's stem or not for each img
-            --> then intersect with is_stem_mat, to get final the final is_stem_mat2 
-        '''
-        mean_each_img = np.mean(np.mean(img_stack,axis=2),axis=1)#mean of each image
-        mean_each_stack = np.repeat(mean_each_img[:,np.newaxis],img_stack.shape[1],1)
-        mean_each_stack = np.repeat(mean_each_stack[:,:,np.newaxis],img_stack.shape[2],2) 
-        bigger_than_mean =  img_stack > mean_each_stack#thresholded by mean
-        is_stem_mat2 = bigger_than_mean[:-1,:,:]*(is_stem_mat*1)
-        #drop the last img s.t. size would be the same as diff_stack
-        #multiply by is_stem_mat to crudely remove the noises (false positive) outside of is_stem_mat2
+#        is_stem_mat = extract_foreground(mean_img,chunk_folder,expand_radius_ratio=8,is_save=True)
+#        
+#        the above is_stem_mat might be too big
+#        (one matrix that determines whether it's stem for all images)
+#        for each img, 
+#            use the fact that stem is brighter than background from original img 
+#            --> threshold by mean of each image to get another estimate of whether 
+#            it's stem or not for each img
+#            --> then intersect with is_stem_mat, to get final the final is_stem_mat2 
+#        
+#        mean_each_img = np.mean(np.mean(img_stack,axis=2),axis=1)#mean of each image
+#        mean_each_stack = np.repeat(mean_each_img[:,np.newaxis],img_stack.shape[1],1)
+#        mean_each_stack = np.repeat(mean_each_stack[:,:,np.newaxis],img_stack.shape[2],2) 
+#        bigger_than_mean =  img_stack > mean_each_stack#thresholded by mean
+#        is_stem_mat2 = bigger_than_mean[:-1,:,:]*(is_stem_mat*1)
+#        #drop the last img s.t. size would be the same as diff_stack
+#        #multiply by is_stem_mat to crudely remove the noises (false positive) outside of is_stem_mat2
+        is_stem_mat = np.ones(img_stack.shape)
+        img_re_idx = 0
+        for filename in img_paths[(start_img_idx-1):end_img_idx]: #original img: 958 rowsx646 cols
+            imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
+            imgGarray=imgRGB_arr[:,:,1] #only look at G layer
+            #put in the correct data structure
+            if img_re_idx==0:
+                is_stem_mat[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True)
+            else:
+                is_stem_mat[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=2)
+            img_re_idx = img_re_idx + 1
+        is_stem_mat2 = is_stem_mat[:-1,:,:]#drop the last img s.t. size would be the same as diff_stack
+        print("finish is_stem_mat2")
+        
     
     final_stack1 = np.ndarray(bin_stack.shape, dtype=np.float32)
     has_embolism = np.zeros(bin_stack.shape[0])#1: that img is predicted to have embolism
@@ -164,7 +177,7 @@ if match:
         area_th = 30
         area_th2 = 3#30
         final_area_th = 0
-        shift_th = 1
+        max_emb_prop = 1
         density_th = 0.4
         num_px_th = 50
         ratio_th=5
@@ -187,47 +200,93 @@ if match:
         rect_height_th = 0.02#200/959
         cc_rect_th = 0.35#ALCLAT1_leaf img_idx=167 true emb part:0.34, img_idx=73(false positive part:0.36)
     else:
+        #is_stem_mat2 = np.ones(bin_stack.shape)
         area_th = 1
         area_th2 = 3#10
+        c1_sz = max(round(25/646*max(img_ncol,img_nrow)),1)#in case img is flipped: in2_stem
+        d1_sz = max(round(10/646*max(img_ncol,img_nrow)),1)
         final_area_th = 78
-        shift_th = 0.06#0.05
-        density_th = 0.4
+        max_emb_prop = 0.3#(has to be > 0.05 for a2_stem img_idx=224; has to > 0.19 for c4_stem img_idx=39; has to <0.29 for a4_stem img_idx=5; but has to be <0.19 for a4_stem img_idx=1
+        #TODO: don't use max_emb_prop, but use img_sum?
+        density_th = 0.35#<0.395 for cas5_stem #<0.36 in4_stem img_idx=232
         num_px_th = 50
         ratio_th=35  
         final_area_th2 = 80
-        emb_freq_th = 5/349 #depends on which stages the photos are taken
+        emb_freq_th = 0.05#5/349=0.014#a2_stem #depends on which stages the photos are taken
         cc_th = 3
+        window_size = 200
+        minRadius = 5
     
     bin_stem_stack = bin_stack*is_stem_mat2
     '''1st stage'''
-    for img_idx in range(0, bin_stack.shape[0]):
-        stem_area = np.sum(is_stem_mat2[img_idx,:,:])
-        final_stack1[img_idx,:,:] = find_emoblism_by_contour(bin_stem_stack,img_idx,stem_area = stem_area,final_area_th = final_area_th,
-                                                    area_th=area_th, area_th2=area_th2,ratio_th=ratio_th,e2_sz=1,o2_sz=2,cl2_sz=2,
-                                                    plot_interm=False,shift_th=shift_th,density_th=density_th,num_px_th=num_px_th)
+    if is_stem==True:
+        filter_stack = median_filter_stack(is_stem_mat2*th_stack,5)#5 is better than max(round(5/646*img_ncol),1) for cas2.2_Stem
+        print("median filter done")
+        
+        '''
+        bubble detection
+        '''
+        bubble_stack,has_bubble_vec= detect_bubble(filter_stack, minRadius = minRadius)
+        
+        if is_save==True:
+            filter_norm = filter_stack/np.repeat(np.repeat(np.max(np.max(filter_stack,2),1)[:,np.newaxis],img_nrow,1)[:,:,np.newaxis],img_ncol,2)#normalize for displaying
+            combined_list_bubble = ((bubble_stack*255).astype(np.uint8),(filter_norm*255).astype(np.uint8),(bin_stack*255).astype(np.uint8))
+            bubble_combined = np.concatenate(combined_list_bubble,axis=2)
+            bubble_combined_inv =  -bubble_combined+255#so that bubbles: white --> black, bgd: black-->white
+            tiff.imsave(chunk_folder+'/bubble_stack.tif', bubble_combined_inv)
+            print("saved bubble_stack.tif")
+            
+            has_bubble_idx = np.where(has_bubble_vec==1)[0]
+            has_bubble_per = round(100*len(has_bubble_idx)/(img_num-1),2)
+        else:
+            print("finish bubble_stack")
+        '''
+        shift detection
+        '''
+        plot_overlap_sum(is_stem_mat, img_folder_name ,chunk_folder, is_save = True)
+        
+        
+        for img_idx in range(0, bin_stack.shape[0]):
+            stem_area = np.sum(is_stem_mat2[img_idx,:,:])
+            final_stack1[img_idx,:,:] = find_emoblism_by_filter_contour(bin_stem_stack,filter_stack,img_idx,stem_area = stem_area,final_area_th = final_area_th,
+                                                        area_th=area_th, area_th2=area_th2,ratio_th=ratio_th,e2_sz=1,o2_sz=2,cl2_sz=2,c1_sz=c1_sz,d1_sz=d1_sz,
+                                                        plot_interm=False,max_emb_prop=max_emb_prop,density_th=density_th,num_px_th=num_px_th)
+            #TODO: closing/dilate param should depend on the width of stem (now it's depend on width of img)
+    else:
+        for img_idx in range(0, bin_stack.shape[0]):
+            stem_area = np.sum(is_stem_mat2[img_idx,:,:])
+            final_stack1[img_idx,:,:] = find_emoblism_by_contour(bin_stem_stack,img_idx,stem_area = stem_area,final_area_th = final_area_th,
+                                                        area_th=area_th, area_th2=area_th2,ratio_th=ratio_th,e2_sz=1,o2_sz=2,cl2_sz=2,
+                                                        plot_interm=False,max_emb_prop=max_emb_prop,density_th=density_th,num_px_th=num_px_th)
     print("1st stage done")
     '''2nd stage: reduce false positive'''
     if is_stem==True:
         '''
         Don't count as embolism if it keeps appearing (probably is plastic cover)
         '''
-        final_stack_sum = np.sum(final_stack1,axis=0)/255 #the number of times embolism has occurred in a pixel
-        #each pixel in final_stack is 0 or 255, hence we divide by 255 to make it more intuitive 
-        #plot_gray_img(final_stack_sum,"final_stack_sum")
-        not_emb_part = (final_stack_sum/(img_num-1) > emb_freq_th)
-        #plot_gray_img(not_emb_part,"not_emb_part")
-        num_cc_fss,mat_cc_fss = cv2.connectedComponents((final_stack_sum>cc_th).astype(np.uint8))
-        not_emb_cc = np.unique(not_emb_part*mat_cc_fss)
-        not_emb_mask = not_emb_part*0
-        if not_emb_cc.size > 1: #not only background
-            for not_emb_cc_label in not_emb_cc[1:]: #starts with "1", cuz "0" is for bkg
-                not_emb_mask = not_emb_mask + (mat_cc_fss == not_emb_cc_label)*1
-        plot_gray_img(not_emb_mask,"not_emb_mask")
-        not_emb_mask_exp = cv2.dilate(not_emb_mask.astype(np.uint8), np.ones((10,10),np.uint8),iterations = 1)#expand a bit
-        plot_gray_img(not_emb_mask_exp,"not_emb_mask_exp")
-        emb_cand_mask = -(not_emb_mask_exp-1)#inverse, switch 0 and 1
-        #plot_gray_img(emb_cand_mask,"emb_cand_mask")
-        final_stack = np.repeat(emb_cand_mask[np.newaxis,:,:],img_num-1,0)*final_stack1
+        final_stack= np.zeros(bin_stack.shape)
+        window_idx_max = math.ceil(bin_stack.shape[0]/window_size)
+        for window_idx in range(0,window_idx_max):
+            window_start_idx = window_idx*window_size
+            window_end_idx = min((window_idx+1)*window_size,(end_img_idx-start_img_idx))
+            # "-start_img_idx": because start_img_idx might not start at 0
+            current_window_size = window_end_idx-window_start_idx#img_num mod window_size might not be 0 
+            
+            substack = np.sum(final_stack1[window_start_idx:window_end_idx],axis=0)/255
+            #the number of times embolism has occurred in a pixel
+            #each pixel in final_stack is 0 or 255, hence we divide by 255 to make it more intuitive 
+            #plot_gray_img(final_stack_sum,"final_stack_sum")
+            not_emb_mask = (substack/current_window_size > emb_freq_th)*(substack>cc_th)
+            #plot_gray_img(not_emb_mask,str(window_idx)+"_not_emb_mask")
+            if is_save==True:
+                plt.imsave(chunk_folder + "/"+str(window_idx)+"_not_emb_mask.jpg",not_emb_mask,cmap='gray')
+            not_emb_mask_exp = cv2.dilate(not_emb_mask.astype(np.uint8), np.ones((10,10),np.uint8),iterations = 1)#expand a bit
+            plot_gray_img(not_emb_mask_exp,str(window_idx)+"_not_emb_mask_exp")
+            if is_save==True:
+                plt.imsave(chunk_folder + "/"+str(window_idx)+"_not_emb_mask_exp.jpg",not_emb_mask_exp,cmap='gray')
+            emb_cand_mask = -(not_emb_mask_exp-1)#inverse, switch 0 and 1
+            #plot_gray_img(emb_cand_mask,"emb_cand_mask")
+            final_stack[window_start_idx:window_end_idx,:,:] = np.repeat(emb_cand_mask[np.newaxis,:,:],current_window_size,0)*final_stack1[window_start_idx:window_end_idx,:,:]
         
         #treat whole img as no emb, if the number of embolized pixels is too small in an img
         num_emb_each_img = np.sum(np.sum(final_stack/255,axis=2),axis=1)#the number of embolized pixels in each img
@@ -235,6 +294,7 @@ if match:
         emb_cand_each_img1 = np.repeat(emb_cand_each_img[:,np.newaxis],final_stack.shape[1],1)
         emb_cand_stack = np.repeat(emb_cand_each_img1[:,:,np.newaxis],final_stack.shape[2],2)
         final_stack = emb_cand_stack*final_stack
+        #final_stack=final_stack1
     else:    
         final_stack = np.copy(final_stack1)
         '''
@@ -309,10 +369,12 @@ if match:
     final_combined = np.concatenate(combined_list,axis=2)
     final_combined_inv =  -final_combined+255 #invert 0 and 255 s.t. background becomes white
 
-    final_combined_inv_info = add_img_info_to_stack(final_combined_inv,img_paths)
+    final_combined_inv_info = add_img_info_to_stack(final_combined_inv,img_paths,start_img_idx)
     if is_save==True:
         tiff.imsave(chunk_folder+'/combined_4.tif', final_combined_inv_info)
-        print("saved combined_4.tif")
+        tiff.imsave(chunk_folder+'/predict.tif',255-final_stack.astype(np.uint8))
+        tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
+        print("saved tif files")
     
     '''
     Confusion Matrix
@@ -330,10 +392,10 @@ if match:
 
     F_positive = os.path.join(chunk_folder,'false_positive')
     F_negative = os.path.join(chunk_folder,'false_negative')
-    T_negative = os.path.join(chunk_folder,'true_positive')
+    T_positive = os.path.join(chunk_folder,'true_positive')
     if is_save == True:
         #create/empty folder
-        con_output_path = [F_positive,F_negative,T_negative]
+        con_output_path = [F_positive,F_negative,T_positive]
         for foldername in con_output_path:
             if not os.path.exists(foldername):#create new folder if not existed
                 os.makedirs(foldername)
@@ -342,28 +404,51 @@ if match:
                 os.makedirs(foldername)#create
         #save images into false_positive, false_negative, true_positive subfolders
         for i in con_img_list[1]:
-            plt.imsave(chunk_folder + "/false_positive/"+str(i)+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
+            plt.imsave(chunk_folder + "/false_positive/"+str(i+(start_img_idx-1))+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
         
         for i in con_img_list[2]:
-            plt.imsave(chunk_folder + "/false_negative/"+str(i)+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
+            plt.imsave(chunk_folder + "/false_negative/"+str(i+(start_img_idx-1))+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
         
         for i in con_img_list[3]:
-            plt.imsave(chunk_folder + "/true_positive/"+str(i)+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
+            plt.imsave(chunk_folder + "/true_positive/"+str(i+(start_img_idx-1))+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
         #but there could still be cases where there are false positive pixels in true positive img
     con_df_px = confusion_mat_pixel(final_stack,true_mask)
     #print(con_df_px)
     total_num_pixel = final_stack.shape[0]*final_stack.shape[1]*final_stack.shape[2]
     #print(con_df_px/total_num_pixel)
-    with open (chunk_folder + '/confusion_mat_file.txt',"w") as f:
-        f.write(str(con_img_list[0]))
-        f.write(str("\n\n"))
-        f.write(f'false positive img index: {con_img_list[1]}')
-        f.write(str("\n\n"))
-        f.write(f'false negative img index: {con_img_list[2]}')    
-        f.write(str("\n\n"))
-        f.write(f'con_df_px: \n {con_df_px}')
-        f.write(str("\n\n"))
-        f.write(f'probability of pix: \n {(con_df_px/total_num_pixel)}')
+    metrix_img = calc_metric(con_img_list[0])
+    metrix_px = calc_metric(con_df_px)
+    
+    con_df_cluster = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10)
+    metrix_cluster = calc_metric(con_df_cluster)
+    if is_save ==True:
+        with open (chunk_folder + '/confusion_mat_file.txt',"w") as f:
+            f.write('img level metric:\n')
+            f.write(str(metrix_img))
+            f.write(str("\n\n"))
+            f.write(str(con_img_list[0]))
+            f.write(str("\n\n"))
+            f.write(f'false positive img index: {con_img_list[1]+(start_img_idx-1)}')
+            f.write(str("\n\n"))
+            f.write(f'false negative img index: {con_img_list[2]+(start_img_idx-1)}')
+            f.write(str("\n\n"))
+            f.write('pixel level metric:\n')
+            f.write(str(metrix_px))
+            f.write(str("\n\n"))
+            f.write(f'con_df_px: \n {con_df_px}')
+            f.write(str("\n\n"))
+            f.write(f'probability of pix: \n {(con_df_px/total_num_pixel)}')
+            f.write(str("\n\n"))
+            f.write('cluster level metric:\n')
+            f.write(str(metrix_cluster))
+            f.write(str("\n\n"))
+            f.write(f'con_df_cluster: \n {con_df_cluster}')
+            f.write(str("\n\n"))
+            f.write(f'percentage of img w/ bubble: {len(has_bubble_idx)}/{(img_num-1)} = {has_bubble_per} %\n')
+            f.write('img index with bubble:\n')
+            f.write(str(has_bubble_idx+(start_img_idx-1)))
+    
+        
 
 else:
 #    no_tif.append(i)##commented out for-loop for img_folder
