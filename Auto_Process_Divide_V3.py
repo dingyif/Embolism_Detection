@@ -177,7 +177,7 @@ if match:
         area_th = 30
         area_th2 = 3#30
         final_area_th = 0
-        shift_th = 1
+        max_emb_prop = 1
         density_th = 0.4
         num_px_th = 50
         ratio_th=5
@@ -206,8 +206,8 @@ if match:
         c1_sz = max(round(25/646*max(img_ncol,img_nrow)),1)#in case img is flipped: in2_stem
         d1_sz = max(round(10/646*max(img_ncol,img_nrow)),1)
         final_area_th = 78
-        shift_th = 0.3#(has to be > 0.05 for a2_stem img_idx=224; has to > 0.19 for c4_stem img_idx=39; has to <0.29 for a4_stem img_idx=5; but has to be <0.19 for a4_stem img_idx=1
-        #TODO: don't use shift_th, but use img_sum?
+        max_emb_prop = 0.3#(has to be > 0.05 for a2_stem img_idx=224; has to > 0.19 for c4_stem img_idx=39; has to <0.29 for a4_stem img_idx=5; but has to be <0.19 for a4_stem img_idx=1
+        #TODO: don't use max_emb_prop, but use img_sum?
         density_th = 0.35#<0.395 for cas5_stem #<0.36 in4_stem img_idx=232
         num_px_th = 50
         ratio_th=35  
@@ -246,14 +246,14 @@ if match:
             stem_area = np.sum(is_stem_mat2[img_idx,:,:])
             final_stack1[img_idx,:,:] = find_emoblism_by_filter_contour(bin_stem_stack,filter_stack,img_idx,stem_area = stem_area,final_area_th = final_area_th,
                                                         area_th=area_th, area_th2=area_th2,ratio_th=ratio_th,e2_sz=1,o2_sz=2,cl2_sz=2,c1_sz=c1_sz,d1_sz=d1_sz,
-                                                        plot_interm=False,shift_th=shift_th,density_th=density_th,num_px_th=num_px_th)
+                                                        plot_interm=False,max_emb_prop=max_emb_prop,density_th=density_th,num_px_th=num_px_th)
             #TODO: closing/dilate param should depend on the width of stem (now it's depend on width of img)
     else:
         for img_idx in range(0, bin_stack.shape[0]):
             stem_area = np.sum(is_stem_mat2[img_idx,:,:])
             final_stack1[img_idx,:,:] = find_emoblism_by_contour(bin_stem_stack,img_idx,stem_area = stem_area,final_area_th = final_area_th,
                                                         area_th=area_th, area_th2=area_th2,ratio_th=ratio_th,e2_sz=1,o2_sz=2,cl2_sz=2,
-                                                        plot_interm=False,shift_th=shift_th,density_th=density_th,num_px_th=num_px_th)
+                                                        plot_interm=False,max_emb_prop=max_emb_prop,density_th=density_th,num_px_th=num_px_th)
     print("1st stage done")
     '''2nd stage: reduce false positive'''
     if is_stem==True:

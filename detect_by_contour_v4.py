@@ -191,7 +191,7 @@ def extract_foregroundRGB(img_2d,chunk_folder, blur_radius=10.0,expand_radius_ra
 #############################################################################
 #    main function for detecting embolism
 ############################################################################# 
-def find_emoblism_by_contour(bin_stack,img_idx,stem_area,final_area_th = 20000/255,area_th=30, area_th2=30,ratio_th=5,e2_sz=3,o2_sz=1,cl2_sz=3,plot_interm=False,shift_th=0.05,density_th=0.4,num_px_th=50):
+def find_emoblism_by_contour(bin_stack,img_idx,stem_area,final_area_th = 20000/255,area_th=30, area_th2=30,ratio_th=5,e2_sz=3,o2_sz=1,cl2_sz=3,plot_interm=False,max_emb_prop=0.05,density_th=0.4,num_px_th=50):
     ############# step 1: connect the embolism parts in the mask (more false positive) ############# 
     #    opening(2*2) and closing(5*5)[closing_e] 
     #    --> keep contours with area>area_th and fill in the contour by polygons [contour_mask]
@@ -337,13 +337,13 @@ def find_emoblism_by_contour(bin_stack,img_idx,stem_area,final_area_th = 20000/2
             #    (connected component level)
             #    Discard connected components w/small density or area
             ################################################################################################
-            if np.sum(final_img)/stem_area > shift_th:
+            if np.sum(final_img)/stem_area > max_emb_prop:
                 '''
                 percentage of embolism in the stem_area is too large
                 probably is false positive due to shifting of img (case: stem img_idx=66,67)
                 '''
                 if plot_interm==True:
-                    print("percentage of embolism in the stem_area is too large",np.sum(final_img)/stem_area,"> shift_th =",shift_th)
+                    print("percentage of embolism in the stem_area is too large",np.sum(final_img)/stem_area,"> max_emb_prop =",max_emb_prop)
                 final_img = final_img * 0
                 return(final_img)
 
@@ -386,7 +386,7 @@ def find_emoblism_by_contour(bin_stack,img_idx,stem_area,final_area_th = 20000/2
                 plot_gray_img(final_img,str(img_idx)+"_final_img")
             return(final_img*255)
             
-def find_emoblism_by_filter_contour(bin_stack,filter_stack,img_idx,stem_area,final_area_th = 20000/255,area_th=30, area_th2=30,ratio_th=5,c1_sz=25,d1_sz=10,e2_sz=3,o2_sz=1,cl2_sz=3,plot_interm=False,shift_th=0.05,density_th=0.4,num_px_th=50):
+def find_emoblism_by_filter_contour(bin_stack,filter_stack,img_idx,stem_area,final_area_th = 20000/255,area_th=30, area_th2=30,ratio_th=5,c1_sz=25,d1_sz=10,e2_sz=3,o2_sz=1,cl2_sz=3,plot_interm=False,max_emb_prop=0.05,density_th=0.4,num_px_th=50):
     ############# step 1: connect the embolism parts in the mask (more false positive) ############# 
     #    opening(2*2) and closing(5*5)[closing_e] 
     #    --> keep contours with area>area_th and fill in the contour by polygons [contour_mask]
@@ -541,13 +541,13 @@ def find_emoblism_by_filter_contour(bin_stack,filter_stack,img_idx,stem_area,fin
             #    (connected component level)
             #    Discard connected components w/small density or area
             ################################################################################################
-            if np.sum(final_img)/stem_area > shift_th:
+            if np.sum(final_img)/stem_area > max_emb_prop:
                 '''
                 percentage of embolism in the stem_area is too large
                 probably is false positive due to shifting of img (case: stem img_idx=66,67)
                 '''
                 if plot_interm==True:
-                    print("percentage of embolism in the stem_area is too large",np.sum(final_img)/stem_area,"> shift_th =",shift_th)
+                    print("percentage of embolism in the stem_area is too large",np.sum(final_img)/stem_area,"> max_emb_prop =",max_emb_prop)
                 final_img = final_img * 0
                 return(final_img)
 
