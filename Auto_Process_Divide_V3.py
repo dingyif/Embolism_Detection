@@ -64,7 +64,7 @@ if match:
     print(f'Image Folder Name: {img_folder_name}')
 
     chunk_idx = 0#starts from 0
-    chunk_size = 300#process 600 images a time
+    chunk_size = 200#process 600 images a time
     #print('index: {}'.format(i))
     is_save = True
 
@@ -215,6 +215,7 @@ if match:
         emb_freq_th = 0.05#5/349=0.014#a2_stem #depends on which stages the photos are taken
         cc_th = 3
         window_size = 200
+        minRadius = 5
     
     bin_stem_stack = bin_stack*is_stem_mat2
     '''1st stage'''
@@ -225,7 +226,7 @@ if match:
         '''
         bubble detection
         '''
-        bubble_stack,has_bubble_vec= detect_bubble(filter_stack)
+        bubble_stack,has_bubble_vec= detect_bubble(filter_stack, minRadius = minRadius)
         
         if is_save==True:
             filter_norm = filter_stack/np.repeat(np.repeat(np.max(np.max(filter_stack,2),1)[:,np.newaxis],img_nrow,1)[:,:,np.newaxis],img_ncol,2)#normalize for displaying
@@ -234,6 +235,9 @@ if match:
             bubble_combined_inv =  -bubble_combined+255#so that bubbles: white --> black, bgd: black-->white
             tiff.imsave(chunk_folder+'/bubble_stack.tif', bubble_combined_inv)
             print("saved bubble_stack.tif")
+            
+            has_bubble_idx = np.where(has_bubble_vec==1)[0]
+            has_bubble_per = round(100*len(has_bubble_idx)/(img_num-1),2)
         else:
             print("finish bubble_stack")
         '''
@@ -439,6 +443,10 @@ if match:
         f.write(str("\n\n"))
         f.write(f'con_df_cluster: \n {con_df_cluster}')
         f.write(str("\n\n"))
+        f.write(f'percentage of img w/ bubble: {len(has_bubble_idx)}/{(img_num-1)} = {has_bubble_per} %\n')
+        f.write('img index with bubble:\n')
+        f.write(str(has_bubble_idx+(start_img_idx-1)))
+    
         
 
 else:
