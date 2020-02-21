@@ -20,6 +20,7 @@ import sys#for printing error message
 import gc
 import density#self-written density.py
 from collections import Counter#for count 1,2 in overlap mat
+import seaborn as sns
 #############################################################################
 #    Sanity check:
 #    see if the sum of pixel values in an image of diff_pos_stack
@@ -50,7 +51,7 @@ def plot_overlap_sum(is_stem_mat, title_str ,chunk_folder, is_save = False):
     plt.ylabel("portion of overlap area")
     plt.xlabel("image index")
     plt.title(title_str)
-    
+
     if is_save == True:
         plt.savefig(chunk_folder + "/m1_overlap_area_hist_img.jpg",bbox_inches='tight')
     return(prop)
@@ -643,7 +644,7 @@ def add_img_info_to_stack(img_stack,img_paths,start_img_idx):
 def img_contain_emb(img_stack):
     return( np.any(np.any(img_stack,axis=2),axis=1)*1)#0 or 1
 
-def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_emb: list, blur_radius: float) -> list :
+def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_emb: list, blur_radius: float, img_folder, is_save = False) -> list :
     '''
     we need to check the blur radius need to be set different for different situation or not.
     confusion matrix at cluster level
@@ -670,7 +671,6 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
         num_cc_fp, mat_cc_fp = cv2.connectedComponents(smooth_fp_img.astype(np.uint8))
         #add up the false postive cluster
         f_pos += num_cc_fp - 1
-    
     #look at true positive at images level
     #true_embolism_img, and predicted connected component
     for index in t_emb_img_n:
@@ -698,7 +698,27 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
             t_pos += num_cc_lcb2 -1
         if num_cc_tp-num_cc_lcb2 >0:
             f_neg += num_cc_tp-num_cc_lcb2 
-            
+
+    #list of np areas
+    unique_mat_cc_fp_label = np.unique(mat_cc_fp) 
+    fp_area = []
+    if unique_mat_cc_fp_label.size > 1: #more than 1 area 
+        for cc_fp_label_stem in unique_mat_cc_fp_label[1:]:
+            fp_area.append(np.sum(mat_cc_fp == cc_fp_label_stem))
+
+    #list of tp areas
+    unique_mat_cc_tp_label = np.unique(mat_cc_tp) 
+    tp_area = []
+    if unique_mat_cc_tp_label.size > 1: #more than 1 area 
+        for cc_tp_label_stem in unique_mat_cc_tp_label[1:]:
+            tp_area.append(np.sum(mat_cc_tp == cc_tp_label_stem))
+    ax = sns.distplot(tp_area,label = 'True Positive')
+    ax = sns.distplot(fp_area,label = 'False Positive')
+    ax.set_title('TP/FP Histogram')
+    ax.legend()
+    if is_save==True:
+        ax.figure.savefig(img_folder + '/m4_TP/FP Histogram' + '.jpg')
+        
     con_mat = np.ndarray((2,2), dtype=np.float32)
     column_names = ['Predict 0', 'Predict 1']
     row_names    = ['True 0','True 1']
