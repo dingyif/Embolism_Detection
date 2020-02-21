@@ -48,9 +48,9 @@ def plot_overlap_sum(is_stem_mat, title_str ,chunk_folder, is_save = False):
     plt.figure()
     plt.plot(range(len(prop)),prop)
     plt.ylabel("portion of overlap area")
-    plt.xlabel("image relative index")
+    plt.xlabel("image index")
     plt.title(title_str)
-
+    
     if is_save == True:
         plt.savefig(chunk_folder + "/m1_overlap_area_hist_img.jpg",bbox_inches='tight')
     return(prop)
