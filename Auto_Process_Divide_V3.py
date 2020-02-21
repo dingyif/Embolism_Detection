@@ -15,12 +15,13 @@ from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel,confusio
 from density import density_of_a_rect
 from detect_by_filter_fx import median_filter_stack
 import math
+import seaborn as sns
 
 folder_list = []
 has_tif = []
 no_tif =[]
-#disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-disk_path = 'F:/Diane/Col/research/code/'
+disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+#disk_path = 'F:/Diane/Col/research/code/'
 img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
@@ -64,7 +65,7 @@ if match:
     print(f'Image Folder Name: {img_folder_name}')
 
     chunk_idx = 0#starts from 0
-    chunk_size = 400#process 600 images a time
+    chunk_size = 100#process 600 images a time
     #print('index: {}'.format(i))
     is_save = True
 
@@ -521,7 +522,17 @@ if match:
     metrix_img = calc_metric(con_img_list[0])
     metrix_px = calc_metric(con_df_px)
     
-    con_df_cluster = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10)
+    con_df_cluster, tp_area, fp_area = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10)
+    
+    ax = sns.distplot(tp_area,label = 'True Positive',norm_hist=False,kde=False, bins=25)
+    ax = sns.distplot(fp_area,label = 'False Positive',norm_hist=False,kde=False)
+    ax.set_title('TP/FP Histogram')
+    ax.set_ylabel('Counts')
+    ax.set_xlabel('Area')
+    ax.legend()
+    if is_save == True:
+        ax.figure.savefig(chunk_folder + '/m4_TP FP Histogram.jpg')
+        
     metrix_cluster = calc_metric(con_df_cluster)
     if is_save ==True:
         with open (chunk_folder + '/confusion_mat_file.txt',"w") as f:

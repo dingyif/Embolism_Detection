@@ -655,6 +655,8 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
     t_pos = 0
     t_neg = 0
     
+    tp_area = []
+    fp_area = []
     #NOT SURE: how do you define true negative at cluster level? same as it at img_level?
     tn_idx = np.where((has_embolism==true_has_emb)*(true_has_emb==0))[0]
     t_neg = len(tn_idx)
@@ -670,6 +672,10 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
         num_cc_fp, mat_cc_fp = cv2.connectedComponents(smooth_fp_img.astype(np.uint8))
         #add up the false postive cluster
         f_pos += num_cc_fp - 1
+        unique_mat_cc_fp_label = np.unique(mat_cc_fp) 
+        if unique_mat_cc_fp_label.size > 1: #more than 1 area 
+            for cc_fp_label_stem in unique_mat_cc_fp_label[1:]:
+                fp_area.append(np.sum(mat_cc_fp == cc_fp_label_stem))
     
     #look at true positive at images level
     #true_embolism_img, and predicted connected component
@@ -690,6 +696,10 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
         lab_cl_bin_1 = to_binary(mat_cc_pred_p)
         lab_cl_bin_2 = lab_cl_bin_1 * mat_cc_tp
         num_cc_lcb2 = len(np.unique(lab_cl_bin_2))
+        unique_mat_cc_tp_label = np.unique(mat_cc_tp) 
+        if unique_mat_cc_tp_label.size > 1: #more than 1 area 
+            for cc_tp_label_stem in unique_mat_cc_tp_label[1:]:
+                tp_area.append(np.sum(mat_cc_tp == cc_tp_label_stem))  
         
         
         if num_cc_pred_p-num_cc_tp>0:
@@ -707,7 +717,7 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
     con_mat[0,1] = f_pos
     con_mat[1,0] = f_neg
     con_df = pd.DataFrame(con_mat, columns=column_names, index=row_names)
-    return(con_df)
+    return(con_df,tp_area,fp_area)
 
 
 def confusion_mat_img(has_embolism,true_has_emb):
