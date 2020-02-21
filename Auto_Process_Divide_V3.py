@@ -26,7 +26,7 @@ img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
-img_folder = all_folders_dir[17]
+img_folder = all_folders_dir[4]
 
 #Need to process c folder
 #img_folder_c = all_folders_dir[14:]
@@ -65,7 +65,7 @@ if match:
     print(f'Image Folder Name: {img_folder_name}')
 
     chunk_idx = 0#starts from 0
-    chunk_size = 900#process 600 images a time
+    chunk_size = 600#process 600 images a time
     #print('index: {}'.format(i))
     is_save = True
 
@@ -522,7 +522,7 @@ if match:
     metrix_img = calc_metric(con_img_list[0])
     metrix_px = calc_metric(con_df_px)
     
-    con_df_cluster, tp_area, fp_area = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10)
+    con_df_cluster, tp_area, fp_area,tp_height,fp_height,tp_width,fp_width = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10)
     
     plt.figure()
     ax = sns.distplot(tp_area,label = 'True Positive',norm_hist=False,kde=False, bins=50)#assumes max(tp_area)>max(fp_area)?
@@ -543,6 +543,26 @@ if match:
     ax.legend()
     if is_save == True:
         plt.savefig(chunk_folder + '/m4_TP FP Histogram_Density.jpg')
+        
+    plt.figure()
+    ax = sns.distplot(tp_height,label = 'True Positive',norm_hist=True,kde=False, bins=50)
+    ax = sns.distplot(fp_height,label = 'False Positive',norm_hist=True,kde=False, bins=50)
+    ax.set_title('Connected Component Height Histogram (TP vs FP)')
+    ax.set_ylabel('Density')
+    ax.set_xlabel('Height of a Connected Component')
+    ax.legend()
+    if is_save == True:
+        plt.savefig(chunk_folder + '/m4_Height Histogram_Density.jpg')
+    
+    plt.figure()
+    ax = sns.distplot(tp_width,label = 'True Positive',norm_hist=True,kde=False, bins=50)
+    ax = sns.distplot(fp_width,label = 'False Positive',norm_hist=True,kde=False, bins=50)
+    ax.set_title('Connected Component Width Histogram (TP vs FP)')
+    ax.set_ylabel('Density')
+    ax.set_xlabel('Width of a Connected Component')
+    ax.legend()
+    if is_save == True:
+        plt.savefig(chunk_folder + '/m4_Width Histogram_Density.jpg')
         
     metrix_cluster = calc_metric(con_df_cluster)
     if is_save ==True:

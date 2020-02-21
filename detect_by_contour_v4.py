@@ -656,7 +656,11 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
     t_neg = 0
     
     tp_area = []
+    tp_height = []
+    tp_width=[]
     fp_area = []
+    fp_height = []
+    fp_width=[]
     #NOT SURE: how do you define true negative at cluster level? same as it at img_level?
     tn_idx = np.where((has_embolism==true_has_emb)*(true_has_emb==0))[0]
     t_neg = len(tn_idx)
@@ -669,13 +673,24 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
         img_2d_fp = pred_stack[img_num,:,:]
         #clustering process
         smooth_fp_img = ndimage.gaussian_filter(img_2d_fp, sigma = blur_radius)
-        num_cc_fp, mat_cc_fp = cv2.connectedComponents(smooth_fp_img.astype(np.uint8))
-        #add up the false postive cluster
-        f_pos += num_cc_fp - 1
-        unique_mat_cc_fp_label = np.unique(mat_cc_fp) 
-        if unique_mat_cc_fp_label.size > 1: #more than 1 area 
-            for cc_fp_label_stem in unique_mat_cc_fp_label[1:]:
-                fp_area.append(np.sum(mat_cc_fp == cc_fp_label_stem))
+        
+        num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(smooth_fp_img.astype(np.uint8), 8)#8-connectivity
+        
+        cc_width = stats[1:,cv2.CC_STAT_WIDTH]#"1:", ignore bgd:0
+        cc_height = stats[1:,cv2.CC_STAT_HEIGHT]
+        cc_area = stats[1:, cv2.CC_STAT_AREA]
+        
+        fp_area.append(cc_area[0])
+        fp_height.append(cc_height[0])
+        fp_width.append(cc_width[0])
+        
+#        num_cc_fp, mat_cc_fp = cv2.connectedComponents(smooth_fp_img.astype(np.uint8))
+#        #add up the false postive cluster
+#        f_pos += num_cc_fp - 1
+#        unique_mat_cc_fp_label = np.unique(mat_cc_fp) 
+#        if unique_mat_cc_fp_label.size > 1: #more than 1 area 
+#            for cc_fp_label_stem in unique_mat_cc_fp_label[1:]:
+#                fp_area.append(np.sum(mat_cc_fp == cc_fp_label_stem))
     
     #look at true positive at images level
     #true_embolism_img, and predicted connected component
@@ -686,28 +701,51 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
         smooth_tp_img = ndimage.gaussian_filter(img_2d_tp, sigma = blur_radius)
         #need to binary to this 
         smooth_pred_p_img = ndimage.gaussian_filter(img_2d_prd_p, sigma = blur_radius)
-        #cc pred_p_img
-        num_cc_pred_p, mat_cc_pred_p = cv2.connectedComponents(smooth_pred_p_img.astype(np.uint8))
-        #clustering tp
-        num_cc_tp, mat_cc_tp = cv2.connectedComponents(smooth_tp_img.astype(np.uint8))
-        #plot_gray_img(mat_cc_pred_p>0)
-        #plot_gray_img(mat_cc_tp>0)
-        #binary the labelled cluster
-        lab_cl_bin_1 = to_binary(mat_cc_pred_p)
-        lab_cl_bin_2 = lab_cl_bin_1 * mat_cc_tp
+        
+#        #cc pred_p_img
+#        num_cc_pred_p, mat_cc_pred_p = cv2.connectedComponents(smooth_pred_p_img.astype(np.uint8))
+#        #clustering tp
+#        num_cc_tp, mat_cc_tp = cv2.connectedComponents(smooth_tp_img.astype(np.uint8))
+#        #plot_gray_img(mat_cc_pred_p>0)
+#        #plot_gray_img(mat_cc_tp>0)
+#        #binary the labelled cluster
+#        lab_cl_bin_1 = to_binary(mat_cc_pred_p)
+#        lab_cl_bin_2 = lab_cl_bin_1 * mat_cc_tp
+#        num_cc_lcb2 = len(np.unique(lab_cl_bin_2))
+#        unique_mat_cc_tp_label = np.unique(mat_cc_tp) 
+#        if unique_mat_cc_tp_label.size > 1: #more than 1 area 
+#            for cc_tp_label_stem in unique_mat_cc_tp_label[1:]:
+#                tp_area.append(np.sum(mat_cc_tp == cc_tp_label_stem))  
+        
+        
+        num_cc_p, mat_cc_p, stats_p, centroids_p  = cv2.connectedComponentsWithStats(smooth_pred_p_img.astype(np.uint8), 8)#8-connectivity
+        num_cc_t, mat_cc_t, stats_t, centroids_t  = cv2.connectedComponentsWithStats(smooth_tp_img.astype(np.uint8), 8)
+        
+        lab_cl_bin_1 = to_binary(mat_cc_p)
+        lab_cl_bin_2 = lab_cl_bin_1 * mat_cc_t
         num_cc_lcb2 = len(np.unique(lab_cl_bin_2))
-        unique_mat_cc_tp_label = np.unique(mat_cc_tp) 
-        if unique_mat_cc_tp_label.size > 1: #more than 1 area 
-            for cc_tp_label_stem in unique_mat_cc_tp_label[1:]:
-                tp_area.append(np.sum(mat_cc_tp == cc_tp_label_stem))  
         
+        cc_width = stats_t[1:,cv2.CC_STAT_WIDTH]#"1:", ignore bgd:0
+        cc_height = stats_t[1:,cv2.CC_STAT_HEIGHT]
+        cc_area = stats_t[1:, cv2.CC_STAT_AREA]
         
-        if num_cc_pred_p-num_cc_tp>0:
-            f_pos += num_cc_pred_p-num_cc_tp
+        tp_area.append(cc_area[0])
+        tp_height.append(cc_height[0])
+        tp_width.append(cc_width[0])
+        
+        if num_cc_p-num_cc_t>0:
+            f_pos += num_cc_p-num_cc_t
         if num_cc_lcb2 >1: # not just background
             t_pos += num_cc_lcb2 -1
-        if num_cc_tp-num_cc_lcb2 >0:
-            f_neg += num_cc_tp-num_cc_lcb2 
+        if num_cc_t-num_cc_lcb2 >0:
+            f_neg += num_cc_t-num_cc_lcb2 
+        
+#        if num_cc_pred_p-num_cc_tp>0:
+#            f_pos += num_cc_pred_p-num_cc_tp
+#        if num_cc_lcb2 >1: # not just background
+#            t_pos += num_cc_lcb2 -1
+#        if num_cc_tp-num_cc_lcb2 >0:
+#            f_neg += num_cc_tp-num_cc_lcb2 
             
     con_mat = np.ndarray((2,2), dtype=np.float32)
     column_names = ['Predict 0', 'Predict 1']
@@ -717,7 +755,7 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
     con_mat[0,1] = f_pos
     con_mat[1,0] = f_neg
     con_df = pd.DataFrame(con_mat, columns=column_names, index=row_names)
-    return(con_df,tp_area,fp_area)
+    return(con_df,tp_area,fp_area,tp_height,fp_height,tp_width,fp_width)
 
 
 def confusion_mat_img(has_embolism,true_has_emb):
