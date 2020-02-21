@@ -30,7 +30,7 @@ def plot_img_sum(img_3d,title_str,img_folder,is_save=False):
     plt.figure()
     plt.plot(range(len(sum_of_img)),sum_of_img)
     plt.ylabel("sum of pixel values in an image")
-    plt.xlabel("image relative index")
+    plt.xlabel("image index")
     plt.title(title_str)
     if is_save==True:
         plt.savefig(img_folder+'/m0_'+title_str+'.jpg',bbox_inches='tight')
