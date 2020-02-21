@@ -20,12 +20,13 @@ folder_list = []
 has_tif = []
 no_tif =[]
 disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+#disk_path = '/Volumes/DataDisk/embolism_project/..'
 #disk_path = 'F:/Diane/Col/research/code/'
 img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
-img_folder = all_folders_dir[36]
+img_folder = all_folders_dir[4]
 
 #Need to process c folder
 #img_folder_c = all_folders_dir[14:]
@@ -64,7 +65,7 @@ if match:
     print(f'Image Folder Name: {img_folder_name}')
 
     chunk_idx = 0#starts from 0
-    chunk_size = 200#process 600 images a time
+    chunk_size = 300#process 600 images a time
     #print('index: {}'.format(i))
     is_save = True
 
@@ -166,6 +167,10 @@ if match:
             img_re_idx = img_re_idx + 1
         is_stem_mat2 = is_stem_mat[:-1,:,:]#drop the last img s.t. size would be the same as diff_stack
         print("finish is_stem_mat2")
+        '''
+        shift detection
+        '''
+        prop = plot_overlap_sum(is_stem_mat, img_folder_name ,chunk_folder, is_save = True)
         
     
     final_stack1 = np.ndarray(bin_stack.shape, dtype=np.float32)
@@ -215,7 +220,6 @@ if match:
         emb_freq_th = 0.05#5/349=0.014#a2_stem #depends on which stages the photos are taken
         cc_th = 3
         window_size = 200
-        minRadius = 5
     
     bin_stem_stack = bin_stack*is_stem_mat2
     '''1st stage'''
@@ -226,7 +230,7 @@ if match:
         '''
         bubble detection
         '''
-        bubble_stack,has_bubble_vec= detect_bubble(filter_stack, minRadius = minRadius)
+        bubble_stack,has_bubble_vec= detect_bubble(filter_stack)
         
         if is_save==True:
             filter_norm = filter_stack/np.repeat(np.repeat(np.max(np.max(filter_stack,2),1)[:,np.newaxis],img_nrow,1)[:,:,np.newaxis],img_ncol,2)#normalize for displaying
@@ -235,9 +239,6 @@ if match:
             bubble_combined_inv =  -bubble_combined+255#so that bubbles: white --> black, bgd: black-->white
             tiff.imsave(chunk_folder+'/bubble_stack.tif', bubble_combined_inv)
             print("saved bubble_stack.tif")
-            
-            has_bubble_idx = np.where(has_bubble_vec==1)[0]
-            has_bubble_per = round(100*len(has_bubble_idx)/(img_num-1),2)
         else:
             print("finish bubble_stack")
         '''
@@ -419,35 +420,30 @@ if match:
     metrix_img = calc_metric(con_img_list[0])
     metrix_px = calc_metric(con_df_px)
     
-    con_df_cluster = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10)
+    con_df_cluster = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius = 10, img_folder = img_folder, is_save = True)
     metrix_cluster = calc_metric(con_df_cluster)
-    if is_save ==True:
-        with open (chunk_folder + '/confusion_mat_file.txt',"w") as f:
-            f.write('img level metric:\n')
-            f.write(str(metrix_img))
-            f.write(str("\n\n"))
-            f.write(str(con_img_list[0]))
-            f.write(str("\n\n"))
-            f.write(f'false positive img index: {con_img_list[1]+(start_img_idx-1)}')
-            f.write(str("\n\n"))
-            f.write(f'false negative img index: {con_img_list[2]+(start_img_idx-1)}')
-            f.write(str("\n\n"))
-            f.write('pixel level metric:\n')
-            f.write(str(metrix_px))
-            f.write(str("\n\n"))
-            f.write(f'con_df_px: \n {con_df_px}')
-            f.write(str("\n\n"))
-            f.write(f'probability of pix: \n {(con_df_px/total_num_pixel)}')
-            f.write(str("\n\n"))
-            f.write('cluster level metric:\n')
-            f.write(str(metrix_cluster))
-            f.write(str("\n\n"))
-            f.write(f'con_df_cluster: \n {con_df_cluster}')
-            f.write(str("\n\n"))
-            f.write(f'percentage of img w/ bubble: {len(has_bubble_idx)}/{(img_num-1)} = {has_bubble_per} %\n')
-            f.write('img index with bubble:\n')
-            f.write(str(has_bubble_idx+(start_img_idx-1)))
-    
+    with open (chunk_folder + '/confusion_mat_file.txt',"w") as f:
+        f.write('img level metric:\n')
+        f.write(str(metrix_img))
+        f.write(str("\n\n"))
+        f.write(str(con_img_list[0]))
+        f.write(str("\n\n"))
+        f.write(f'false positive img index: {con_img_list[1]+(start_img_idx-1)}')
+        f.write(str("\n\n"))
+        f.write(f'false negative img index: {con_img_list[2]+(start_img_idx-1)}')
+        f.write(str("\n\n"))
+        f.write('pixel level metric:\n')
+        f.write(str(metrix_px))
+        f.write(str("\n\n"))
+        f.write(f'con_df_px: \n {con_df_px}')
+        f.write(str("\n\n"))
+        f.write(f'probability of pix: \n {(con_df_px/total_num_pixel)}')
+        f.write(str("\n\n"))
+        f.write('cluster level metric:\n')
+        f.write(str(metrix_cluster))
+        f.write(str("\n\n"))
+        f.write(f'con_df_cluster: \n {con_df_cluster}')
+        f.write(str("\n\n"))
         
 
 else:
