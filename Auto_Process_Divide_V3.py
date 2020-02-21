@@ -65,7 +65,7 @@ if match:
     print(f'Image Folder Name: {img_folder_name}')
 
     chunk_idx = 0#starts from 0
-    chunk_size = 100#process 600 images a time
+    chunk_size = 900#process 600 images a time
     #print('index: {}'.format(i))
     is_save = True
 
@@ -525,14 +525,24 @@ if match:
     con_df_cluster, tp_area, fp_area = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10)
     
     plt.figure()
-    ax = sns.distplot(tp_area,label = 'True Positive',norm_hist=False,kde=False, bins=25)
-    ax = sns.distplot(fp_area,label = 'False Positive',norm_hist=False,kde=False)
+    ax = sns.distplot(tp_area,label = 'True Positive',norm_hist=False,kde=False, bins=50)#assumes max(tp_area)>max(fp_area)?
+    ax = sns.distplot(fp_area,label = 'False Positive',norm_hist=False,kde=False, bins=50)
     ax.set_title('Connected Component Area Histogram (TP vs FP)')
     ax.set_ylabel('Counts')
     ax.set_xlabel('Area of a Connected Component')
     ax.legend()
     if is_save == True:
         plt.savefig(chunk_folder + '/m4_TP FP Histogram.jpg')
+    
+    plt.figure()
+    ax = sns.distplot(tp_area,label = 'True Positive',norm_hist=True,kde=False, bins=50)
+    ax = sns.distplot(fp_area,label = 'False Positive',norm_hist=True,kde=False, bins=50)
+    ax.set_title('Connected Component Area Histogram (TP vs FP)')
+    ax.set_ylabel('Density')
+    ax.set_xlabel('Area of a Connected Component')
+    ax.legend()
+    if is_save == True:
+        plt.savefig(chunk_folder + '/m4_TP FP Histogram_Density.jpg')
         
     metrix_cluster = calc_metric(con_df_cluster)
     if is_save ==True:
@@ -562,8 +572,10 @@ if match:
             f.write('img index with bubble:\n')
             f.write(str(has_bubble_idx+(start_img_idx-1)))
             f.write(str("\n\n"))
+            f.write(f'poor_qual_set size: {len(poor_qual_set)}/{(img_num-1)} = {len(poor_qual_set)/(img_num-1)} %\n')
             f.write(f'poor_qual_set:\n{poor_qual_set}')
             f.write(str("\n\n"))
+            f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {len(poor_qual_set2)/(img_num-1)} %\n')
             f.write(f'poor_qual_set2:\n{poor_qual_set2}')
     
         
