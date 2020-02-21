@@ -20,8 +20,8 @@ import seaborn as sns
 folder_list = []
 has_tif = []
 no_tif =[]
-disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-#disk_path = 'F:/Diane/Col/research/code/'
+#disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+disk_path = 'F:/Diane/Col/research/code/'
 img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
@@ -82,7 +82,7 @@ if match:
     if is_save==True:
         #create a "folder" for saving resulting tif files such that next time when re-run this program,
         #the resulting tif file won't be viewed as the most recent modified tiff file
-        chunk_folder = os.path.join(img_folder,img_folder_name,'v9.2_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
+        chunk_folder = os.path.join(img_folder,img_folder_name,'v9.3_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
         if not os.path.exists(chunk_folder):#create new folder if not existed
             os.makedirs(chunk_folder)
         else:#empty the existing folder
@@ -527,9 +527,9 @@ if match:
     plt.figure()
     ax = sns.distplot(tp_area,label = 'True Positive',norm_hist=False,kde=False, bins=25)
     ax = sns.distplot(fp_area,label = 'False Positive',norm_hist=False,kde=False)
-    ax.set_title('TP/FP Histogram')
+    ax.set_title('Connected Component Area Histogram (TP vs FP)')
     ax.set_ylabel('Counts')
-    ax.set_xlabel('Area')
+    ax.set_xlabel('Area of a Connected Component')
     ax.legend()
     if is_save == True:
         plt.savefig(chunk_folder + '/m4_TP FP Histogram.jpg')
