@@ -655,7 +655,9 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
     f_neg = 0
     t_pos = 0
     t_neg = 0
-    
+    #collect all the areas
+    fp_area = []
+    tp_area = []
     #NOT SURE: how do you define true negative at cluster level? same as it at img_level?
     tn_idx = np.where((has_embolism==true_has_emb)*(true_has_emb==0))[0]
     t_neg = len(tn_idx)
@@ -671,6 +673,12 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
         num_cc_fp, mat_cc_fp = cv2.connectedComponents(smooth_fp_img.astype(np.uint8))
         #add up the false postive cluster
         f_pos += num_cc_fp - 1
+        #expand list of fp areas
+        unique_mat_cc_fp_label = np.unique(mat_cc_fp) 
+        if unique_mat_cc_fp_label.size > 1: #more than 1 area 
+            for cc_fp_label_stem in unique_mat_cc_fp_label[1:]:
+                fp_area.append(np.sum(mat_cc_fp == cc_fp_label_stem))
+
     #look at true positive at images level
     #true_embolism_img, and predicted connected component
     for index in t_emb_img_n:
@@ -690,6 +698,11 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
         lab_cl_bin_1 = to_binary(mat_cc_pred_p)
         lab_cl_bin_2 = lab_cl_bin_1 * mat_cc_tp
         num_cc_lcb2 = len(np.unique(lab_cl_bin_2))
+        #list of fp areas
+        unique_mat_cc_tp_label = np.unique(mat_cc_tp) 
+        if unique_mat_cc_tp_label.size > 1: #more than 1 area 
+            for cc_tp_label_stem in unique_mat_cc_tp_label[1:]:
+                tp_area.append(np.sum(mat_cc_tp == cc_tp_label_stem))
         
         
         if num_cc_pred_p-num_cc_tp>0:
@@ -699,25 +712,13 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
         if num_cc_tp-num_cc_lcb2 >0:
             f_neg += num_cc_tp-num_cc_lcb2 
 
-    #list of np areas
-    unique_mat_cc_fp_label = np.unique(mat_cc_fp) 
-    fp_area = []
-    if unique_mat_cc_fp_label.size > 1: #more than 1 area 
-        for cc_fp_label_stem in unique_mat_cc_fp_label[1:]:
-            fp_area.append(np.sum(mat_cc_fp == cc_fp_label_stem))
-
-    #list of tp areas
-    unique_mat_cc_tp_label = np.unique(mat_cc_tp) 
-    tp_area = []
-    if unique_mat_cc_tp_label.size > 1: #more than 1 area 
-        for cc_tp_label_stem in unique_mat_cc_tp_label[1:]:
-            tp_area.append(np.sum(mat_cc_tp == cc_tp_label_stem))
-    ax = sns.distplot(tp_area,label = 'True Positive')
-    ax = sns.distplot(fp_area,label = 'False Positive')
+    ax = sns.distplot(tp_area,label = 'True Positive',norm_hist=False,kde=False)
+    ax = sns.distplot(fp_area,label = 'False Positive',norm_hist=False,kde=False)
     ax.set_title('TP/FP Histogram')
+    ax.set_ylabel('Counts')
     ax.legend()
     if is_save==True:
-        ax.figure.savefig(img_folder + '/m4_TP/FP Histogram' + '.jpg')
+        ax.figure.savefig(img_folder + '/m4_TP FP Histogram' + '.jpg')
         
     con_mat = np.ndarray((2,2), dtype=np.float32)
     column_names = ['Predict 0', 'Predict 1']
