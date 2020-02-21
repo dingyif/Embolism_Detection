@@ -524,6 +524,7 @@ if match:
     
     con_df_cluster, tp_area, fp_area = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10)
     
+    plt.figure()
     ax = sns.distplot(tp_area,label = 'True Positive',norm_hist=False,kde=False, bins=25)
     ax = sns.distplot(fp_area,label = 'False Positive',norm_hist=False,kde=False)
     ax.set_title('TP/FP Histogram')
@@ -531,7 +532,7 @@ if match:
     ax.set_xlabel('Area')
     ax.legend()
     if is_save == True:
-        ax.figure.savefig(chunk_folder + '/m4_TP FP Histogram.jpg')
+        plt.savefig(chunk_folder + '/m4_TP FP Histogram.jpg')
         
     metrix_cluster = calc_metric(con_df_cluster)
     if is_save ==True:
