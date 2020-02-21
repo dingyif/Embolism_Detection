@@ -64,7 +64,7 @@ if match:
     print(f'Image Folder Name: {img_folder_name}')
 
     chunk_idx = 0#starts from 0
-    chunk_size = 200#process 600 images a time
+    chunk_size = 400#process 600 images a time
     #print('index: {}'.format(i))
     is_save = True
 
@@ -81,7 +81,7 @@ if match:
     if is_save==True:
         #create a "folder" for saving resulting tif files such that next time when re-run this program,
         #the resulting tif file won't be viewed as the most recent modified tiff file
-        chunk_folder = os.path.join(img_folder,img_folder_name,'v8_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
+        chunk_folder = os.path.join(img_folder,img_folder_name,'v9.2_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
         if not os.path.exists(chunk_folder):#create new folder if not existed
             os.makedirs(chunk_folder)
         else:#empty the existing folder
@@ -159,16 +159,16 @@ if match:
             imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
             imgGarray=imgRGB_arr[:,:,1] #only look at G layer
             #put in the correct data structure
-            if img_re_idx==0:
+            if img_re_idx==0 and is_save==True:
                 is_stem_mat[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True)
             else:
-                is_stem_mat[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=2)
+                is_stem_mat[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder="", blur_radius=10.0,expand_radius_ratio=2)
             img_re_idx = img_re_idx + 1
         is_stem_mat2 = is_stem_mat[:-1,:,:]#drop the last img s.t. size would be the same as diff_stack
         print("finish is_stem_mat2")
         
     
-    final_stack1 = np.ndarray(bin_stack.shape, dtype=np.float32)
+    final_stack1 = np.zeros(bin_stack.shape)
     has_embolism = np.zeros(bin_stack.shape[0])#1: that img is predicted to have embolism
 
     if is_stem == False:
@@ -216,6 +216,13 @@ if match:
         cc_th = 3
         window_size = 200
         minRadius = 5
+        bubble_area_prop_max = 0.2
+        second_ero_kernel_sz = 3
+        second_clo_kernel_sz = 10
+        second_width_max = 0.85#cas2.2 img_idx=232, width=0.41/ img_idx=208, width=0.8
+        second_rect_dens_max = 0.3
+        second_area_max = 0.2
+        plot_interm=False
     
     bin_stem_stack = bin_stack*is_stem_mat2
     '''1st stage'''
@@ -229,7 +236,8 @@ if match:
         bubble_stack,has_bubble_vec= detect_bubble(filter_stack, minRadius = minRadius)
         
         if is_save==True:
-            filter_norm = filter_stack/np.repeat(np.repeat(np.max(np.max(filter_stack,2),1)[:,np.newaxis],img_nrow,1)[:,:,np.newaxis],img_ncol,2)#normalize for displaying
+            max_filter_stack = np.max(np.max(filter_stack,2),1) + 1 #"+1" to avoid divide by 0. TODO: remove "+1" but replace 0 by 1
+            filter_norm = filter_stack/np.repeat(np.repeat(max_filter_stack[:,np.newaxis],img_nrow,1)[:,:,np.newaxis],img_ncol,2)#normalize for displaying
             combined_list_bubble = ((bubble_stack*255).astype(np.uint8),(filter_norm*255).astype(np.uint8),(bin_stack*255).astype(np.uint8))
             bubble_combined = np.concatenate(combined_list_bubble,axis=2)
             bubble_combined_inv =  -bubble_combined+255#so that bubbles: white --> black, bgd: black-->white
@@ -240,6 +248,33 @@ if match:
             has_bubble_per = round(100*len(has_bubble_idx)/(img_num-1),2)
         else:
             print("finish bubble_stack")
+        
+        '''
+        '''
+        bubble_area_prop_vec=np.sum(np.sum(bubble_stack,2),1)/np.sum(np.sum(is_stem_mat2,2),1)
+#        '''
+#        To decide bubble area th--> considered as poor quality -->no emb:
+#        '''
+#        num_bins=50
+#        n_th, bins_th, patches_th= plt.hist(bubble_area_prop_vec,bins=num_bins)
+#        
+#        #don't show 0
+#        plt.figure()
+#        plt.plot(bins_th[2:],n_th[1:])
+#        #plt.xlim(bins_th[1],bins_th[-1])
+#        plt.ylabel("frequency")
+#        plt.xlabel("bubble area")
+#        plt.title("histogram of bubble area (ignoring the 1st bin)")
+#        
+#        plt.figure()
+#        plt.plot(range(len(bubble_area_prop_vec)),bubble_area_prop_vec)
+#        plt.ylabel("bubble area")
+#        plt.xlabel("image index")
+#        plt.title("bubble area in each image")
+#        
+        
+        poor_qual_set = np.where(bubble_area_prop_vec >= bubble_area_prop_max)[0]
+
         '''
         shift detection
         '''
@@ -247,10 +282,16 @@ if match:
         
         
         for img_idx in range(0, bin_stack.shape[0]):
-            stem_area = np.sum(is_stem_mat2[img_idx,:,:])
-            final_stack1[img_idx,:,:] = find_emoblism_by_filter_contour(bin_stem_stack,filter_stack,img_idx,stem_area = stem_area,final_area_th = final_area_th,
-                                                        area_th=area_th, area_th2=area_th2,ratio_th=ratio_th,e2_sz=1,o2_sz=2,cl2_sz=2,c1_sz=c1_sz,d1_sz=d1_sz,
-                                                        plot_interm=False,max_emb_prop=max_emb_prop,density_th=density_th,num_px_th=num_px_th)
+            if img_idx not in poor_qual_set:
+                #the if condition above saves some time but doesn't change much results 
+                #(cuz some predictions would be blocked by shift_th)
+                #results effective on img_idx=5,8 of cas 2.2 stem
+                #could introduce more false positive cuz in the stage "Don't count as embolism if it keeps appearing (probably is plastic cover)"
+                #the not_emb_mask would become smaller 
+                stem_area = np.sum(is_stem_mat2[img_idx,:,:])
+                final_stack1[img_idx,:,:] = find_emoblism_by_filter_contour(bin_stem_stack,filter_stack,img_idx,stem_area = stem_area,final_area_th = final_area_th,
+                                                            area_th=area_th, area_th2=area_th2,ratio_th=ratio_th,e2_sz=1,o2_sz=2,cl2_sz=2,c1_sz=c1_sz,d1_sz=d1_sz,
+                                                            plot_interm=False,max_emb_prop=max_emb_prop,density_th=density_th,num_px_th=num_px_th)
             #TODO: closing/dilate param should depend on the width of stem (now it's depend on width of img)
     else:
         for img_idx in range(0, bin_stack.shape[0]):
@@ -261,6 +302,66 @@ if match:
     print("1st stage done")
     '''2nd stage: reduce false positive'''
     if is_stem==True:
+        
+        final_stack21 = np.copy(final_stack1)
+        
+        '''
+        if there's at least one cc too wide, big area, and dense in bounding box --> flag as poor quality (poor_qual_set2)
+        and treat as if no emb
+        TODO: maybe try using density seg. as in leafs?
+        '''
+        poor_qual_set2 =[]
+        
+        if img_nrow > img_ncol:#normal direction
+            middle_row = np.where(is_stem_mat2[0,round(img_nrow/2),:])[0]#take the middle row(in case top/bottom of stem isn't correctly detected cuz of bark)
+        else:#flip for the special horizontal img:
+            middle_row = np.where(is_stem_mat2[0,:,round(img_ncol/2)])[0]#take the middle row(in case top/bottom of stem isn't correctly detected cuz of bark)
+        stem_est_width1 = middle_row[-1]-middle_row[0]+1#an estimate of stem_width based on the middle row of is_stem_mat2 1st img
+        stem_est_area1 = np.sum(is_stem_mat2[0,:,:])#stem area of 1st img
+        
+        for img_idx in range(0, final_stack21.shape[0]):
+            current_img = final_stack1[img_idx,:,:]
+            if np.sum(current_img)>0:
+        #        img_ero = cv2.erode(current_img.astype(np.uint8), np.ones((second_ero_kernel_sz,second_ero_kernel_sz),np.uint8),iterations = 1)#erose to seperate embolism from noises
+        #        if plot_interm == True:
+        #            plot_gray_img(img_ero,str(img_idx)+"_img_ero")
+                #density_img_exp = cv2.closing(density_img_ero.astype(np.uint8), ,np.uint8),iterations = 1)#expand to connect
+                img_clo = cv2.morphologyEx(current_img.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((second_clo_kernel_sz,second_clo_kernel_sz),np.uint8))
+                if plot_interm == True:
+                    plot_gray_img(img_clo,str(img_idx)+"_img_clo")
+                num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(img_clo.astype(np.uint8), 8)#8-connectivity
+                
+                
+                #TODO: not sure if this is the correct direction for the special horiz. imgs
+                #first two arg: total number of cc, mat with same input size that labels each cc
+                cc_width = stats[1:,cv2.CC_STAT_WIDTH]#"1:", ignore bgd:0
+                cc_height = stats[1:,cv2.CC_STAT_HEIGHT]
+                cc_area = stats[1:, cv2.CC_STAT_AREA]
+                #largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
+                
+                cc_area_too_big = cc_area/stem_est_area1 > second_area_max
+                cc_too_wide = cc_width/stem_est_width1 > second_width_max
+                cc_high_dens_in_rect = cc_area/(cc_width*cc_height) > second_rect_dens_max
+                #cas2.2 img_idx=193 (true emb) the top bark is wide (0.93) and high dens, so need area
+                #cas2.2 img_idx=6 (false pos) is wide prop (>1) and big area prop (0.239) and high dens (0.425)
+                #cas2.2 img_idx=213 (true emb) is wide prop (>1) and big area proportion (0.22) but density of cc in bounding box is small (0.26)
+                if np.any(cc_too_wide*cc_high_dens_in_rect*cc_area_too_big):
+                    poor_qual_set2.append(img_idx)
+                    final_stack21[img_idx,:,:]=mat_cc*0
+                    if plot_interm==True:
+                        print(img_idx," in poor_qual_set2")
+                #TODO: discard cc wide but not tall (probably bark)
+#                else:
+#                    
+#                cc_area_too_small = cc_area
+#                for cc_idx in range(1,num_cc):#1: ignore bgd(0)
+
+#        '''
+#        remove imgs with bubble
+#        '''
+#        no_bubble_stack = 1-bubble_stack
+#        final_stack=final_stack1*no_bubble_stack
+        
         '''
         Don't count as embolism if it keeps appearing (probably is plastic cover)
         '''
@@ -272,7 +373,7 @@ if match:
             # "-start_img_idx": because start_img_idx might not start at 0
             current_window_size = window_end_idx-window_start_idx#img_num mod window_size might not be 0 
             
-            substack = np.sum(final_stack1[window_start_idx:window_end_idx],axis=0)/255
+            substack = np.sum(final_stack21[window_start_idx:window_end_idx],axis=0)/255
             #the number of times embolism has occurred in a pixel
             #each pixel in final_stack is 0 or 255, hence we divide by 255 to make it more intuitive 
             #plot_gray_img(final_stack_sum,"final_stack_sum")
@@ -286,7 +387,7 @@ if match:
                 plt.imsave(chunk_folder + "/"+str(window_idx)+"_not_emb_mask_exp.jpg",not_emb_mask_exp,cmap='gray')
             emb_cand_mask = -(not_emb_mask_exp-1)#inverse, switch 0 and 1
             #plot_gray_img(emb_cand_mask,"emb_cand_mask")
-            final_stack[window_start_idx:window_end_idx,:,:] = np.repeat(emb_cand_mask[np.newaxis,:,:],current_window_size,0)*final_stack1[window_start_idx:window_end_idx,:,:]
+            final_stack[window_start_idx:window_end_idx,:,:] = np.repeat(emb_cand_mask[np.newaxis,:,:],current_window_size,0)*final_stack21[window_start_idx:window_end_idx,:,:]
         
         #treat whole img as no emb, if the number of embolized pixels is too small in an img
         num_emb_each_img = np.sum(np.sum(final_stack/255,axis=2),axis=1)#the number of embolized pixels in each img
@@ -294,7 +395,8 @@ if match:
         emb_cand_each_img1 = np.repeat(emb_cand_each_img[:,np.newaxis],final_stack.shape[1],1)
         emb_cand_stack = np.repeat(emb_cand_each_img1[:,:,np.newaxis],final_stack.shape[2],2)
         final_stack = emb_cand_stack*final_stack
-        #final_stack=final_stack1
+        
+        
     else:    
         final_stack = np.copy(final_stack1)
         '''
@@ -447,6 +549,10 @@ if match:
             f.write(f'percentage of img w/ bubble: {len(has_bubble_idx)}/{(img_num-1)} = {has_bubble_per} %\n')
             f.write('img index with bubble:\n')
             f.write(str(has_bubble_idx+(start_img_idx-1)))
+            f.write(str("\n\n"))
+            f.write(f'poor_qual_set:\n{poor_qual_set}')
+            f.write(str("\n\n"))
+            f.write(f'poor_qual_set2:\n{poor_qual_set2}')
     
         
 
