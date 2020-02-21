@@ -19,13 +19,13 @@ import math
 folder_list = []
 has_tif = []
 no_tif =[]
-#disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-disk_path = 'F:/Diane/Col/research/code/'
+disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+#disk_path = 'F:/Diane/Col/research/code/'
 img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
-img_folder = all_folders_dir[17]
+img_folder = all_folders_dir[36]
 
 #Need to process c folder
 #img_folder_c = all_folders_dir[14:]
