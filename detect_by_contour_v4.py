@@ -20,6 +20,7 @@ import sys#for printing error message
 import gc
 import density#self-written density.py
 from collections import Counter#for count 1,2 in overlap mat
+import seaborn as sns
 #############################################################################
 #    Sanity check:
 #    see if the sum of pixel values in an image of diff_pos_stack
@@ -30,7 +31,7 @@ def plot_img_sum(img_3d,title_str,img_folder,is_save=False):
     plt.figure()
     plt.plot(range(len(sum_of_img)),sum_of_img)
     plt.ylabel("sum of pixel values in an image")
-    plt.xlabel("image relative index")
+    plt.xlabel("image index")
     plt.title(title_str)
     if is_save==True:
         plt.savefig(img_folder+'/m0_'+title_str+'.jpg',bbox_inches='tight')
@@ -643,7 +644,7 @@ def add_img_info_to_stack(img_stack,img_paths,start_img_idx):
 def img_contain_emb(img_stack):
     return( np.any(np.any(img_stack,axis=2),axis=1)*1)#0 or 1
 
-def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_emb: list, blur_radius: float) -> list :
+def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_emb: list, blur_radius: float, chunk_folder = "", is_save=False) -> list :
     '''
     we need to check the blur radius need to be set different for different situation or not.
     confusion matrix at cluster level
@@ -655,6 +656,12 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
     t_pos = 0
     t_neg = 0
     
+    tp_area = []
+    tp_height = []
+    tp_width=[]
+    fp_area = []
+    fp_height = []
+    fp_width=[]
     #NOT SURE: how do you define true negative at cluster level? same as it at img_level?
     tn_idx = np.where((has_embolism==true_has_emb)*(true_has_emb==0))[0]
     t_neg = len(tn_idx)
@@ -667,9 +674,24 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
         img_2d_fp = pred_stack[img_num,:,:]
         #clustering process
         smooth_fp_img = ndimage.gaussian_filter(img_2d_fp, sigma = blur_radius)
-        num_cc_fp, mat_cc_fp = cv2.connectedComponents(smooth_fp_img.astype(np.uint8))
-        #add up the false postive cluster
-        f_pos += num_cc_fp - 1
+        
+        num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(smooth_fp_img.astype(np.uint8), 8)#8-connectivity
+        
+        cc_width = stats[1:,cv2.CC_STAT_WIDTH]#"1:", ignore bgd:0
+        cc_height = stats[1:,cv2.CC_STAT_HEIGHT]
+        cc_area = stats[1:, cv2.CC_STAT_AREA]
+        
+        fp_area.append(cc_area[0])
+        fp_height.append(cc_height[0])
+        fp_width.append(cc_width[0])
+        
+#        num_cc_fp, mat_cc_fp = cv2.connectedComponents(smooth_fp_img.astype(np.uint8))
+#        #add up the false postive cluster
+#        f_pos += num_cc_fp - 1
+#        unique_mat_cc_fp_label = np.unique(mat_cc_fp) 
+#        if unique_mat_cc_fp_label.size > 1: #more than 1 area 
+#            for cc_fp_label_stem in unique_mat_cc_fp_label[1:]:
+#                fp_area.append(np.sum(mat_cc_fp == cc_fp_label_stem))
     
     #look at true positive at images level
     #true_embolism_img, and predicted connected component
@@ -680,24 +702,51 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
         smooth_tp_img = ndimage.gaussian_filter(img_2d_tp, sigma = blur_radius)
         #need to binary to this 
         smooth_pred_p_img = ndimage.gaussian_filter(img_2d_prd_p, sigma = blur_radius)
-        #cc pred_p_img
-        num_cc_pred_p, mat_cc_pred_p = cv2.connectedComponents(smooth_pred_p_img.astype(np.uint8))
-        #clustering tp
-        num_cc_tp, mat_cc_tp = cv2.connectedComponents(smooth_tp_img.astype(np.uint8))
-        #plot_gray_img(mat_cc_pred_p>0)
-        #plot_gray_img(mat_cc_tp>0)
-        #binary the labelled cluster
-        lab_cl_bin_1 = to_binary(mat_cc_pred_p)
-        lab_cl_bin_2 = lab_cl_bin_1 * mat_cc_tp
+        
+#        #cc pred_p_img
+#        num_cc_pred_p, mat_cc_pred_p = cv2.connectedComponents(smooth_pred_p_img.astype(np.uint8))
+#        #clustering tp
+#        num_cc_tp, mat_cc_tp = cv2.connectedComponents(smooth_tp_img.astype(np.uint8))
+#        #plot_gray_img(mat_cc_pred_p>0)
+#        #plot_gray_img(mat_cc_tp>0)
+#        #binary the labelled cluster
+#        lab_cl_bin_1 = to_binary(mat_cc_pred_p)
+#        lab_cl_bin_2 = lab_cl_bin_1 * mat_cc_tp
+#        num_cc_lcb2 = len(np.unique(lab_cl_bin_2))
+#        unique_mat_cc_tp_label = np.unique(mat_cc_tp) 
+#        if unique_mat_cc_tp_label.size > 1: #more than 1 area 
+#            for cc_tp_label_stem in unique_mat_cc_tp_label[1:]:
+#                tp_area.append(np.sum(mat_cc_tp == cc_tp_label_stem))  
+        
+        
+        num_cc_p, mat_cc_p, stats_p, centroids_p  = cv2.connectedComponentsWithStats(smooth_pred_p_img.astype(np.uint8), 8)#8-connectivity
+        num_cc_t, mat_cc_t, stats_t, centroids_t  = cv2.connectedComponentsWithStats(smooth_tp_img.astype(np.uint8), 8)
+        
+        lab_cl_bin_1 = to_binary(mat_cc_p)
+        lab_cl_bin_2 = lab_cl_bin_1 * mat_cc_t
         num_cc_lcb2 = len(np.unique(lab_cl_bin_2))
         
+        cc_width = stats_t[1:,cv2.CC_STAT_WIDTH]#"1:", ignore bgd:0
+        cc_height = stats_t[1:,cv2.CC_STAT_HEIGHT]
+        cc_area = stats_t[1:, cv2.CC_STAT_AREA]
         
-        if num_cc_pred_p-num_cc_tp>0:
-            f_pos += num_cc_pred_p-num_cc_tp
+        tp_area.append(cc_area[0])
+        tp_height.append(cc_height[0])
+        tp_width.append(cc_width[0])
+        
+        if num_cc_p-num_cc_t>0:
+            f_pos += num_cc_p-num_cc_t
         if num_cc_lcb2 >1: # not just background
             t_pos += num_cc_lcb2 -1
-        if num_cc_tp-num_cc_lcb2 >0:
-            f_neg += num_cc_tp-num_cc_lcb2 
+        if num_cc_t-num_cc_lcb2 >0:
+            f_neg += num_cc_t-num_cc_lcb2 
+        
+#        if num_cc_pred_p-num_cc_tp>0:
+#            f_pos += num_cc_pred_p-num_cc_tp
+#        if num_cc_lcb2 >1: # not just background
+#            t_pos += num_cc_lcb2 -1
+#        if num_cc_tp-num_cc_lcb2 >0:
+#            f_neg += num_cc_tp-num_cc_lcb2 
             
     con_mat = np.ndarray((2,2), dtype=np.float32)
     column_names = ['Predict 0', 'Predict 1']
@@ -707,7 +756,48 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
     con_mat[0,1] = f_pos
     con_mat[1,0] = f_neg
     con_df = pd.DataFrame(con_mat, columns=column_names, index=row_names)
-    return(con_df)
+    
+    #plot results
+    plt.figure()
+    ax = sns.distplot(tp_area,label = 'True Positive',norm_hist=False,kde=False, bins=50)#assumes max(tp_area)>max(fp_area)?
+    ax = sns.distplot(fp_area,label = 'False Positive',norm_hist=False,kde=False, bins=50)
+    ax.set_title('Connected Component Area Histogram (TP vs FP)')
+    ax.set_ylabel('Counts')
+    ax.set_xlabel('Area of a Connected Component')
+    ax.legend()
+    if is_save == True:
+        plt.savefig(chunk_folder + '/m4_TP FP Histogram.jpg')
+    
+    plt.figure()
+    ax = sns.distplot(tp_area,label = 'True Positive',norm_hist=True,kde=False, bins=50)
+    ax = sns.distplot(fp_area,label = 'False Positive',norm_hist=True,kde=False, bins=50)
+    ax.set_title('Connected Component Area Histogram (TP vs FP)')
+    ax.set_ylabel('Density')
+    ax.set_xlabel('Area of a Connected Component')
+    ax.legend()
+    if is_save == True:
+        plt.savefig(chunk_folder + '/m4_TP FP Histogram_Density.jpg')
+        
+    plt.figure()
+    ax = sns.distplot(tp_height,label = 'True Positive',norm_hist=True,kde=False, bins=50)
+    ax = sns.distplot(fp_height,label = 'False Positive',norm_hist=True,kde=False, bins=50)
+    ax.set_title('Connected Component Height Histogram (TP vs FP)')
+    ax.set_ylabel('Density')
+    ax.set_xlabel('Height of a Connected Component')
+    ax.legend()
+    if is_save == True:
+        plt.savefig(chunk_folder + '/m4_Height Histogram_Density.jpg')
+    
+    plt.figure()
+    ax = sns.distplot(tp_width,label = 'True Positive',norm_hist=True,kde=False, bins=50)
+    ax = sns.distplot(fp_width,label = 'False Positive',norm_hist=True,kde=False, bins=50)
+    ax.set_title('Connected Component Width Histogram (TP vs FP)')
+    ax.set_ylabel('Density')
+    ax.set_xlabel('Width of a Connected Component')
+    ax.legend()
+    if is_save == True:
+        plt.savefig(chunk_folder + '/m4_Width Histogram_Density.jpg')
+    return(con_df,tp_area,fp_area,tp_height,fp_height,tp_width,fp_width)
 
 
 def confusion_mat_img(has_embolism,true_has_emb):
@@ -856,3 +946,63 @@ def detect_bubble(input_stack,blur_radius=11,hough_param1=25,hough_param2=10, mi
 #            print(img_idx,": has no bubble")
         
     return bubble_stack,has_bubble_vec
+
+def calc_bubble_area_prop(bubble_stack,is_stem_mat2,chunk_folder,is_save=False,plot_interm=True):
+    '''
+    calculate bubble area/stem area of each img
+    plot_interm has to be True if want to use is_save=True
+    '''
+    bubble_area_prop_vec=np.sum(np.sum(bubble_stack,2),1)/np.sum(np.sum(is_stem_mat2,2),1)
+    
+    if plot_interm==True:
+    
+        '''
+        To decide bubble_area_prop_max--> considered as poor quality -->no emb:
+        '''
+        #from v9.4
+        #bound for bubble_area_prop_max: foldername(chunk_size) / largest bubble_area has emb img_idx / smallest bubble_area no emb img_idx
+        #>0.2,0.081, <0.31: cas5_stem(50) / 28 (not poor qual by eyes, but thought emb as bubble),1 / 8
+        #>0.159, <0.268: cas2.2_stem(300) / 4(bubble_area_prop=1.025), 2nd largest bubble_area has emb img_idx =232 / 40
+        #>0.059, <0.31: inglau4_stem(100) / 52 / 8
+        #>0.003, --: inglau3_stem(200) / 177 / --
+        #>0.024, <0.213,0.222,0.389: Alclat2_stem(400) / 324 / 0,1,54
+        #look at max cc area of each img in bubble_stack: to separate cases for a2_stem and c5_stem: 
+        #c2.2 img_idx=5,40
+        num_bins=50
+        n_th, bins_th, patches_th= plt.hist(bubble_area_prop_vec,bins=num_bins)
+    
+        #usually 1st bin is way TOO large --> don't show 1st bin(0)in hist for better visualization
+        plt.figure()
+        plt.plot(bins_th[2:],n_th[1:])
+        #plt.xlim(bins_th[1],bins_th[-1])
+        plt.ylabel("frequency")
+        plt.xlabel("bubble area")
+        plt.title("histogram of bubble area (ignoring the 1st bin)")
+        if is_save == True:
+            plt.savefig(chunk_folder + '/m4.5_histogram of bubble area (ignoring the 1st bin).jpg')
+        
+        plt.figure()
+        plt.plot(range(len(bubble_area_prop_vec)),bubble_area_prop_vec)
+        plt.ylabel("bubble area")
+        plt.xlabel("image index")
+        plt.title("bubble area in each image")
+        if is_save == True:
+            plt.savefig(chunk_folder + '/m4.5_bubble area in each image.jpg')
+    return(bubble_area_prop_vec)
+
+def subset_vec_2_sets(input_vec,start_img_idx,set1_idx,set2_idx,output_row_name):
+    '''
+    subset a vector based on 2 index sets
+    then ordered based on vector value, big to small
+    '''
+    #for deciding bubble_area_prop_max
+    img_idx_vec = np.stack((range(0,len(input_vec)),np.around(input_vec,3)))#2 rows
+    img_idx_vec[0,:] += (start_img_idx-1)
+    #1st row indicator of has emb in truth, 2nd row img idx, 3rd row input_vec
+    
+    relative_arg_order = np.flip(np.argsort(input_vec[set1_idx],))#flip:bubble area from big to small
+    set1_pd=pd.DataFrame(img_idx_vec[:,set1_idx][:,relative_arg_order],index=['img_idx',output_row_name])#Sorted by bubble_area_prop
+    
+    relative_arg_order_2 = np.flip(np.argsort(input_vec[set2_idx],))
+    set2_pd=pd.DataFrame(img_idx_vec[:,set2_idx][:,relative_arg_order_2],index=['img_idx',output_row_name])
+    return set1_pd,set2_pd
