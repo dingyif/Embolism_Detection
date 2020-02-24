@@ -9,13 +9,15 @@ import os,shutil#for creating/emptying folders
 import re
 import sys
 from detect_by_contour_v4 import plot_gray_img, to_binary,plot_img_sum, plot_overlap_sum
-from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB, detect_bubble, calc_bubble_area_prop, subset_vec_set
+from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB
+from detect_by_contour_v4 import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set
 from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
 from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric
 from density import density_of_a_rect
 from detect_by_filter_fx import median_filter_stack
 import math
-
+import datetime
+start_time = datetime.datetime.now()
 '''
 for server
 '''
@@ -28,11 +30,12 @@ folder_idx_arg = args.shard#folder index from args
 '''
 user-specified arguments
 '''
+#folder_idx_arg = 5
 disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 #disk_path = 'E:/Diane/Col/research/code/'
 has_processed = False#Working on Processed data or Unprocessed data
 chunk_idx = 0#starts from 0
-chunk_size = 3#the number of imgs to process at a time
+chunk_size = 4000#the number of imgs to process at a time
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
 
@@ -47,7 +50,8 @@ else:
 
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
-#for i, img_folder in enumerate(all_folders_dir):
+
+#for img_folder in all_folders_dir[2:6]:
 img_folder = all_folders_dir[folder_idx_arg]
 
 #Need to process c folder
@@ -110,12 +114,14 @@ else:
     if is_save==True:
         #create a "folder" for saving resulting tif files such that next time when re-run this program,
         #the resulting tif file won't be viewed as the most recent modified tiff file
-        chunk_folder = os.path.join(img_folder,img_folder_name,'v9.4_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
+        chunk_folder = os.path.join(img_folder,img_folder_name,'v9.5_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
         if not os.path.exists(chunk_folder):#create new folder if not existed
             os.makedirs(chunk_folder)
         else:#empty the existing folder
             shutil.rmtree(chunk_folder)#delete
-            os.makedirs(chunk_folder)#create 
+            os.makedirs(chunk_folder)#create
+    else:
+        chunk_folder=""#just a placeholder for fx like calc_bubble_area_prop
     
     img_num = end_img_idx-start_img_idx + 1
     
@@ -208,7 +214,7 @@ else:
             if img_re_idx==0 and is_save==True:
                 is_stem_mat[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True)
             else:
-                is_stem_mat[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder="", blur_radius=10.0,expand_radius_ratio=2)
+                is_stem_mat[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=2)
             img_re_idx = img_re_idx + 1
         is_stem_mat2 = is_stem_mat[:-1,:,:]#drop the last img s.t. size would be the same as diff_stack
         print("finish is_stem_mat2")
@@ -263,6 +269,7 @@ else:
         window_size = 200
         minRadius = 5
         bubble_area_prop_max = 0.2
+        bubble_cc_max_area_prop_max = 0.14 #(0.08:cas5_stem+0.2:Alclat2_stem)/2
         second_ero_kernel_sz = 3
         second_clo_kernel_sz = 10
         second_width_max = 0.85#cas2.2 img_idx=232, width=0.41/ img_idx=208, width=0.8
@@ -295,19 +302,19 @@ else:
         else:
             print("finish bubble_stack")
         
-        bubble_area_prop_vec = calc_bubble_area_prop(bubble_stack,is_stem_mat2,chunk_folder,is_save=True,plot_interm=True)
-        
-        
+        bubble_area_prop_vec = calc_bubble_area_prop(bubble_stack,is_stem_mat2,chunk_folder,is_save=is_save,plot_interm=True)
         poor_qual_set = np.where(bubble_area_prop_vec >= bubble_area_prop_max)[0]
-
+        
+        bubble_cc_max_area_prop_vec = calc_bubble_cc_max_area_p(bubble_stack,is_stem_mat2,chunk_folder,is_save=is_save,plot_interm=True)
+        poor_qual_set_cc = np.where(bubble_cc_max_area_prop_vec>=bubble_cc_max_area_prop_max)[0]
         '''
         shift detection
         '''
-        plot_overlap_sum(is_stem_mat, img_folder_name ,chunk_folder, is_save = True)
+        plot_overlap_sum(is_stem_mat, img_folder_name ,chunk_folder, is_save = is_save)
         
         
         for img_idx in range(0, bin_stack.shape[0]):
-            if img_idx not in poor_qual_set:
+            if img_idx not in poor_qual_set_cc:
                 #the if condition above saves some time but doesn't change much results 
                 #(cuz some predictions would be blocked by shift_th)
                 #results effective on img_idx=5,8 of cas 2.2 stem
@@ -509,6 +516,11 @@ else:
         tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
         print("saved tif files")
     
+    #time
+    finish_time = datetime.datetime.now()
+    seconds_in_day = 24 * 60 * 60
+    difference = finish_time - start_time
+    diff_min_sec = divmod(difference.days * seconds_in_day + difference.seconds, 60)
     
     has_embolism = img_contain_emb(final_stack)
     
@@ -553,13 +565,16 @@ else:
         metrix_img = calc_metric(con_img_list[0])
         metrix_px = calc_metric(con_df_px)
         
-        con_df_cluster, tp_area, fp_area,tp_height,fp_height,tp_width,fp_width = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10, chunk_folder=chunk_folder,is_save=True)    
+        con_df_cluster, tp_area, fp_area,tp_height,fp_height,tp_width,fp_width = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10, chunk_folder=chunk_folder,is_save=is_save)    
             
         metrix_cluster = calc_metric(con_df_cluster)
         
         if is_stem==True:
             true_emb_bubble_area = subset_vec_set(bubble_area_prop_vec,start_img_idx,np.where(true_has_emb)[0],output_row_name='bubble_area_prop')
             poor_qual_bubble_area = subset_vec_set(bubble_area_prop_vec,start_img_idx,poor_qual_set,output_row_name='bubble_area_prop')
+            
+            true_emb_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,np.where(true_has_emb)[0],output_row_name='bubble_cc_max_area_prop')
+            poor_qual_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,poor_qual_set_cc,output_row_name='bubble_cc_max_area_prop')
         if is_save ==True:
             with open (chunk_folder + '/confusion_mat_file.txt',"w") as f:
                 f.write('img level metric:\n')
@@ -593,11 +608,18 @@ else:
                     f.write(f'bubble_area_prop of poor_qual_set:\n{poor_qual_bubble_area}\n\n')
                     f.write(f'bubble_area_prop of true_emb:\n{true_emb_bubble_area}')
                     f.write(str("\n\n"))
+                    f.write(f'poor_qual_set_cc size: {len(poor_qual_set_cc)}/{(img_num-1)} = {round(len(poor_qual_set_cc)/(img_num-1)*100,2)} %\n')
+                    f.write(f'poor_qual_set_cc:\n{poor_qual_set_cc}\n')
+                    f.write(f'bubble_cc_max_area_prop of poor_qual_set_cc:\n{poor_qual_bubble_cc_max_area}\n\n')
+                    f.write(f'bubble_cc_max_area_prop of true_emb:\n{true_emb_bubble_cc_max_area}')
+                    f.write(str("\n\n"))
                     f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {round(len(poor_qual_set2)/(img_num-1)*100,2)} %\n')
-                    f.write(f'poor_qual_set2:\n{poor_qual_set2}')
+                    f.write(f'poor_qual_set2:\n{poor_qual_set2}\n\n')
+                    f.write(f'time: {diff_min_sec[0]} min {diff_min_sec[1]} sec')
     else:#match ==False, no more confusion matrix
         if is_stem==True:
             poor_qual_bubble_area = subset_vec_set(bubble_area_prop_vec,start_img_idx,poor_qual_set,output_row_name='bubble_area_prop')
+            poor_qual_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,poor_qual_set_cc,output_row_name='bubble_cc_max_area_prop')
         has_emb_idx = np.where(has_embolism)[0]
         if is_save ==True:
             with open (chunk_folder + '/results_summary.txt',"w") as f:
@@ -615,5 +637,6 @@ else:
                     f.write(str("\n\n"))
                     f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {round(len(poor_qual_set2)/(img_num-1)*100,2)} %\n')
                     f.write(f'poor_qual_set2:\n{poor_qual_set2}')
-        
+                    f.write(f'time: {diff_min_sec[0]} min {diff_min_sec[1]} sec')
+    
             

@@ -969,6 +969,7 @@ def calc_bubble_area_prop(bubble_stack,is_stem_mat2,chunk_folder,is_save=False,p
         #look at max cc area of each img in bubble_stack: to separate cases for a2_stem and c5_stem: 
         #c2.2 img_idx=5,40
         num_bins=50
+        plt.figure()
         n_th, bins_th, patches_th= plt.hist(bubble_area_prop_vec,bins=num_bins)
     
         #usually 1st bin is way TOO large --> don't show 1st bin(0)in hist for better visualization
@@ -989,6 +990,66 @@ def calc_bubble_area_prop(bubble_stack,is_stem_mat2,chunk_folder,is_save=False,p
         if is_save == True:
             plt.savefig(chunk_folder + '/m4.5_bubble area in each image.jpg')
     return(bubble_area_prop_vec)
+
+def max_cc_area(img):
+    #assumes img has at least 2 connected components if including background
+    #or else max() would run into problem
+    _, _, stats, _  = cv2.connectedComponentsWithStats(img.astype(np.uint8), 8)#8-connectivity
+    return(max(stats[1:, cv2.CC_STAT_AREA]))
+
+def calc_bubble_cc_max_area_p(bubble_stack,is_stem_mat2,chunk_folder,is_save=False,plot_interm=True):
+    '''
+    calculate max(bubble connected component area)/stem area of each img
+    plot_interm has to be True if want to use is_save=True
+    '''
+    #motivation: look at max cc area of each img in bubble_stack: to separate cases for a2_stem and c5_stem: 
+    #c2.2 img_idx=5,40
+    
+    #from v9.5
+    # c5(50) improved
+    #bound for bubble_area_prop_max: foldername(chunk_size) / largest bubble_area has emb img_idx / smallest bubble_area no emb img_idx
+    #>0.077, <0.23: cas5_stem(50) / 24 / 2
+    #>0.019, <0.2 Alclat2_stem(400) / 364 / 0 (should decrease theshold s.t. img_idx=1 --> shift )
+    #>0.073, <0.247 cas2.2_stem(300) / 232 / 9 (ignore img_idx=4: true_emb in poor qual)
+    #>0.003, --: inglau3_stem(200) / 177 / -- (exactly same as before cuz everything looks nice after 1st stage :) )
+    #>0.041,<0.212: inglau4_stem(100) / 52 / 5 (should decrease theshold  cuz more fp, img_idx = 8(shift) --> <0.1689)
+        
+    
+    bubble_area_prop_vec=np.sum(np.sum(bubble_stack,2),1)/np.sum(np.sum(is_stem_mat2,2),1)
+    
+    bubble_cc_max_area_vec = np.zeros(bubble_stack.shape[0])
+    for img_idx in np.where(bubble_area_prop_vec>0)[0]:
+        img=bubble_stack[img_idx,:,:]
+        bubble_cc_max_area_vec[img_idx]=max_cc_area(img)
+    bubble_cc_max_area_prop_vec = bubble_cc_max_area_vec/np.sum(np.sum(is_stem_mat2,2),1)
+    
+    if plot_interm==True:
+    
+        '''
+        To decide bubble_cc_max_area_max--> considered as poor quality -->no emb:
+        '''
+        num_bins=50
+        plt.figure()
+        n_th, bins_th, patches_th= plt.hist(bubble_cc_max_area_prop_vec,bins=num_bins)
+    
+        #usually 1st bin is way TOO large --> don't show 1st bin(0)in hist for better visualization
+        plt.figure()
+        plt.plot(bins_th[2:],n_th[1:])
+        #plt.xlim(bins_th[1],bins_th[-1])
+        plt.ylabel("frequency")
+        plt.xlabel("max(bubble c.c. area)")
+        plt.title("histogram of max of bubble connected component area(ignoring the 1st bin)")
+        if is_save == True:
+            plt.savefig(chunk_folder + '/m4.6_histogram of max of bubble connected component area (ignoring the 1st bin).jpg')
+        
+        plt.figure()
+        plt.plot(range(len(bubble_cc_max_area_prop_vec)),bubble_cc_max_area_prop_vec)
+        plt.ylabel("max(bubble c.c. area)")
+        plt.xlabel("image index")
+        plt.title("max(bubble c.c. area) in each image")
+        if is_save == True:
+            plt.savefig(chunk_folder + '/m4.6_max(bubble c.c. area) in each image.jpg')
+    return(bubble_cc_max_area_prop_vec)
 
 def subset_vec_set(input_vec,start_img_idx,set1_idx,output_row_name):
     '''
