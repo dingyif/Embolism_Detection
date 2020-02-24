@@ -990,9 +990,9 @@ def calc_bubble_area_prop(bubble_stack,is_stem_mat2,chunk_folder,is_save=False,p
             plt.savefig(chunk_folder + '/m4.5_bubble area in each image.jpg')
     return(bubble_area_prop_vec)
 
-def subset_vec_2_sets(input_vec,start_img_idx,set1_idx,set2_idx,output_row_name):
+def subset_vec_set(input_vec,start_img_idx,set1_idx,output_row_name):
     '''
-    subset a vector based on 2 index sets
+    subset a vector based on an index set
     then ordered based on vector value, big to small
     '''
     #for deciding bubble_area_prop_max
@@ -1003,6 +1003,4 @@ def subset_vec_2_sets(input_vec,start_img_idx,set1_idx,set2_idx,output_row_name)
     relative_arg_order = np.flip(np.argsort(input_vec[set1_idx],))#flip:bubble area from big to small
     set1_pd=pd.DataFrame(img_idx_vec[:,set1_idx][:,relative_arg_order],index=['img_idx',output_row_name])#Sorted by bubble_area_prop
     
-    relative_arg_order_2 = np.flip(np.argsort(input_vec[set2_idx],))
-    set2_pd=pd.DataFrame(img_idx_vec[:,set2_idx][:,relative_arg_order_2],index=['img_idx',output_row_name])
-    return set1_pd,set2_pd
+    return set1_pd
