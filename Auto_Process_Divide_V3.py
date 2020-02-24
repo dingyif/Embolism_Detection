@@ -9,39 +9,55 @@ import os,shutil#for creating/emptying folders
 import re
 import sys
 from detect_by_contour_v4 import plot_gray_img, to_binary,plot_img_sum, plot_overlap_sum
-from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB, detect_bubble, calc_bubble_area_prop, subset_vec_2_sets
+from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB, detect_bubble, calc_bubble_area_prop, subset_vec_set
 from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
 from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric
 from density import density_of_a_rect
 from detect_by_filter_fx import median_filter_stack
 import math
-import pandas as pd
+
+'''
+user-specified arguments
+'''
+folder_idx_arg = 3
+#disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+disk_path = 'E:/Diane/Col/research/code/'
+has_processed = True#Working on Processed data or Unprocessed data
+chunk_idx = 0#starts from 0
+chunk_size = 300#the number of imgs to process at a time
+#don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
+is_save = True
 
 folder_list = []
 has_tif = []
 no_tif =[]
-#disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-disk_path = 'E:/Diane/Col/research/code/'
-img_folder_rel = os.path.join(disk_path,"Done", "Processed")
+
+if has_processed==True:
+    img_folder_rel = os.path.join(disk_path,"Done", "Processed")
+else:
+    img_folder_rel = os.path.join(disk_path,"ImagesNotYetProcessed")
+
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
-img_folder = all_folders_dir[3]
+img_folder = all_folders_dir[folder_idx_arg]
 
 #Need to process c folder
 #img_folder_c = all_folders_dir[14:]
 #img_folder = img_folder_c[2]
 print(f'img folder name : {img_folder}')
 
-if "ALCLAT5.2_Stem" in img_folder:#jpg files
+#read in either png or jpg files
+img_paths = sorted(glob.glob(img_folder + '/*.png'))
+if img_paths==[]:
     img_paths = sorted(glob.glob(img_folder + '/*.jpg'))
-else:
-    img_paths = sorted(glob.glob(img_folder + '/*.png'))
+    
 
 tiff_paths = sorted(glob.glob(img_folder + '/*.tif'))
 match = False
-#make sure it have tif file in there
-if tiff_paths:
+
+#make sure have tif file in there for the processed ones
+if tiff_paths and has_processed:
     #To get the most recent modified tiff file
     #choose the most recent modified one if there are multiple of them
     
@@ -59,19 +75,19 @@ if tiff_paths:
         if cand_match:
             match = True
             break
-if match:
+if match==False and has_processed:
+    print("no match")
+else:
 #    has_tif.append(i)##commented out for-loop for img_folder
-    print("has tiff")    
-    real_start_img_idx = int(cand_match.group('start_img_idx'))
-    real_end_img_idx = int(cand_match.group('end_img_idx')) + 1
+    if match==True:
+        print("has tiff")    
+        #real_start_img_idx = int(cand_match.group('start_img_idx'))
+        #real_end_img_idx = int(cand_match.group('end_img_idx')) + 1
+    
     #get which folder its processing now
     img_folder_name = os.path.split(img_folder)[1]
     print(f'Image Folder Name: {img_folder_name}')
 
-    chunk_idx = 0#starts from 0
-    chunk_size = 50#process 600 images a time
-    #print('index: {}'.format(i))
-    is_save = True
 
     if "stem" in img_folder.lower():
         is_stem = True
@@ -95,18 +111,34 @@ if match:
     
     img_num = end_img_idx-start_img_idx + 1
     
-    ##manually delete tl_0002_0001_20190726_103828.jpg.t0002.th.jpg for ALCLAT5.2_Stem
+    
     img_re_idx = 0 #relative index for images in start_img_idx to end_img_idx
-    for filename in img_paths[start_img_idx-1:end_img_idx]: #original img: 958 rowsx646 cols
-        img=Image.open(filename).convert('L') #.convert('L'): gray-scale # 646x958
-        img_array=np.float32(img) #convert from Image object to numpy array (black 0-255 white); 958x646
-        #put in the correct data structure
-        if img_re_idx == 0:
-            img_nrow = img_array.shape[0]
-            img_ncol = img_array.shape[1]
-            img_stack = np.ndarray((img_num,img_nrow,img_ncol), dtype=np.float32)
-        img_stack[img_re_idx] = img_array
-        img_re_idx = img_re_idx + 1
+    for filename in img_paths[start_img_idx-1:]: #original img: 958 rowsx646 cols
+        #can't just use end_img_idx for img_paths cuz of th.jpg
+        if img_re_idx < chunk_size:
+            img=Image.open(filename).convert('L') #.convert('L'): gray-scale # 646x958
+            img_array=np.float32(img) #convert from Image object to numpy array (black 0-255 white); 958x646
+            #put in the correct data structure
+            if img_re_idx == 0:
+                img_nrow = img_array.shape[0]
+                img_ncol = img_array.shape[1]
+                img_stack = np.ndarray((img_num,img_nrow,img_ncol), dtype=np.float32)
+                print("img size:",img_nrow," x ", img_ncol)
+                if is_stem==True and img_nrow < img_ncol:
+                    print("[CAUTION] img might be flipped!")
+            
+            if img_array.shape[0]==img_nrow and img_array.shape[1]==img_ncol:
+                img_stack[img_re_idx] = img_array
+                img_re_idx = img_re_idx + 1
+            else:
+                #to avoid error produced by th.jpg: 
+                #ValueError: could not broadcast input array from shape (768,1024) into shape (1944,2592)
+                #ex: in ImagesNotYetProcessed\dacexc2.2_stem
+                #(I manually deleted Processed/ALCLAT5.2_Stem/tl_0002_0001_20190726_103828.jpg.t0002.th.jpg)
+                print("Different img size",filename)
+                img_paths.remove(filename)#remove from the list -->won't cause problem in extract_foregroundRGB, add_img_info_to_stack
+            
+        
     print("finish loading img")
     #############################################################################
     #    Difference between consecutive images
@@ -447,115 +479,133 @@ if match:
         final_stack[treat_as_no_emb_idx,:,:] = np.zeros(final_stack[treat_as_no_emb_idx,:,:].shape)
     
     print("2nd stage done")
-    #combined with true tif file
-    true_mask  = tiff.imread(up_2_date_tiff)#tiff.imread(img_folder+'/4 Mask Substack ('+str(start_img_idx)+'-'+str(end_img_idx-1)+') clean.tif')
-    tm_start_img_idx = chunk_idx*(chunk_size-1)
-    tm_end_img_idx = tm_start_img_idx+chunk_size-1
-    true_mask = true_mask[tm_start_img_idx:tm_end_img_idx,:,:]
-    combined_list = (true_mask,final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
+    
+    if match==True:
+        #combined with true tif file
+        true_mask  = tiff.imread(up_2_date_tiff)#tiff.imread(img_folder+'/4 Mask Substack ('+str(start_img_idx)+'-'+str(end_img_idx-1)+') clean.tif')
+        tm_start_img_idx = chunk_idx*(chunk_size-1)
+        tm_end_img_idx = tm_start_img_idx+chunk_size-1
+        true_mask = true_mask[tm_start_img_idx:tm_end_img_idx,:,:]
+        combined_list = (true_mask,final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
+    else:
+        combined_list = (final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
+    
     final_combined = np.concatenate(combined_list,axis=2)
     final_combined_inv =  -final_combined+255 #invert 0 and 255 s.t. background becomes white
 
     final_combined_inv_info = add_img_info_to_stack(final_combined_inv,img_paths,start_img_idx)
+        
     if is_save==True:
         tiff.imsave(chunk_folder+'/combined_4.tif', final_combined_inv_info)
         tiff.imsave(chunk_folder+'/predict.tif',255-final_stack.astype(np.uint8))
         tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
         print("saved tif files")
     
-    '''
-    Confusion Matrix
-    To see the performance compared to those processed manually using ImageJ
-    '''
-    print("================results===============")
     
-    true_has_emb = img_contain_emb(true_mask)
     has_embolism = img_contain_emb(final_stack)
-    con_img_list = confusion_mat_img(has_embolism,true_has_emb)
-
-    #print(con_img_list[0])
-    #print("false positive img index",con_img_list[1])
-    #print("false negative img index",con_img_list[2])
-
-    F_positive = os.path.join(chunk_folder,'false_positive')
-    F_negative = os.path.join(chunk_folder,'false_negative')
-    T_positive = os.path.join(chunk_folder,'true_positive')
-    if is_save == True:
-        #create/empty folder
-        con_output_path = [F_positive,F_negative,T_positive]
-        for foldername in con_output_path:
-            if not os.path.exists(foldername):#create new folder if not existed
-                os.makedirs(foldername)
-            else:#empty the existing folder
-                shutil.rmtree(foldername)#delete
-                os.makedirs(foldername)#create
-        #save images into false_positive, false_negative, true_positive subfolders
-        for i in con_img_list[1]:
-            plt.imsave(chunk_folder + "/false_positive/"+str(i+(start_img_idx-1))+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
-        
-        for i in con_img_list[2]:
-            plt.imsave(chunk_folder + "/false_negative/"+str(i+(start_img_idx-1))+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
-        
-        for i in con_img_list[3]:
-            plt.imsave(chunk_folder + "/true_positive/"+str(i+(start_img_idx-1))+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
-        #but there could still be cases where there are false positive pixels in true positive img
-    con_df_px = confusion_mat_pixel(final_stack,true_mask)
-    #print(con_df_px)
-    total_num_pixel = final_stack.shape[0]*final_stack.shape[1]*final_stack.shape[2]
-    #print(con_df_px/total_num_pixel)
-    metrix_img = calc_metric(con_img_list[0])
-    metrix_px = calc_metric(con_df_px)
     
-    con_df_cluster, tp_area, fp_area,tp_height,fp_height,tp_width,fp_width = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10, chunk_folder=chunk_folder,is_save=True)    
-        
-    metrix_cluster = calc_metric(con_df_cluster)
+    if match==True:    
+        true_has_emb = img_contain_emb(true_mask)
+        '''
+        Confusion Matrix
+        To see the performance compared to those processed manually using ImageJ
+        '''
+        con_img_list = confusion_mat_img(has_embolism,true_has_emb)
     
-    true_emb_bubble_area,poor_qual_bubble_area = subset_vec_2_sets(bubble_area_prop_vec,start_img_idx,np.where(true_has_emb)[0],poor_qual_set,output_row_name='bubble_area_prop')
-    if is_save ==True:
-        with open (chunk_folder + '/confusion_mat_file.txt',"w") as f:
-            f.write('img level metric:\n')
-            f.write(str(metrix_img))
-            f.write(str("\n\n"))
-            f.write(str(con_img_list[0]))
-            f.write(str("\n\n"))
-            f.write(f'false positive img index: {con_img_list[1]+(start_img_idx-1)}')
-            f.write(str("\n\n"))
-            f.write(f'false negative img index: {con_img_list[2]+(start_img_idx-1)}')
-            f.write(str("\n\n"))
-            f.write('pixel level metric:\n')
-            f.write(str(metrix_px))
-            f.write(str("\n\n"))
-            f.write(f'con_df_px: \n {con_df_px}')
-            f.write(str("\n\n"))
-            f.write(f'probability of pix: \n {(con_df_px/total_num_pixel)}')
-            f.write(str("\n\n"))
-            f.write('cluster level metric:\n')
-            f.write(str(metrix_cluster))
-            f.write(str("\n\n"))
-            f.write(f'con_df_cluster: \n {con_df_cluster}')
-            f.write(str("\n\n"))
-            f.write(f'percentage of img w/ bubble: {len(has_bubble_idx)}/{(img_num-1)} = {has_bubble_per} %\n')
-            f.write('img index with bubble:\n')
-            f.write(str(has_bubble_idx+(start_img_idx-1)))
-            f.write(str("\n\n"))
-            f.write(f'poor_qual_set size: {len(poor_qual_set)}/{(img_num-1)} = {round(len(poor_qual_set)/(img_num-1)*100,2)} %\n')
-            f.write(f'poor_qual_set:\n{poor_qual_set}\n')
-            f.write(f'bubble_area_prop of poor_qual_set:\n{poor_qual_bubble_area}\n\n')
-            f.write(f'bubble_area_prop of true_emb:\n{true_emb_bubble_area}')
-            f.write(str("\n\n"))
-            f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {round(len(poor_qual_set2)/(img_num-1)*100,2)} %\n')
-            f.write(f'poor_qual_set2:\n{poor_qual_set2}')
+        #print(con_img_list[0])
+        #print("false positive img index",con_img_list[1])
+        #print("false negative img index",con_img_list[2])
     
+        F_positive = os.path.join(chunk_folder,'false_positive')
+        F_negative = os.path.join(chunk_folder,'false_negative')
+        T_positive = os.path.join(chunk_folder,'true_positive')
+        if is_save == True:
+            #create/empty folder
+            con_output_path = [F_positive,F_negative,T_positive]
+            for foldername in con_output_path:
+                if not os.path.exists(foldername):#create new folder if not existed
+                    os.makedirs(foldername)
+                else:#empty the existing folder
+                    shutil.rmtree(foldername)#delete
+                    os.makedirs(foldername)#create
+            #save images into false_positive, false_negative, true_positive subfolders
+            for i in con_img_list[1]:
+                plt.imsave(chunk_folder + "/false_positive/"+str(i+(start_img_idx-1))+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
+            
+            for i in con_img_list[2]:
+                plt.imsave(chunk_folder + "/false_negative/"+str(i+(start_img_idx-1))+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
+            
+            for i in con_img_list[3]:
+                plt.imsave(chunk_folder + "/true_positive/"+str(i+(start_img_idx-1))+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
+            #but there could still be cases where there are false positive pixels in true positive img
+        con_df_px = confusion_mat_pixel(final_stack,true_mask)
+        #print(con_df_px)
+        total_num_pixel = final_stack.shape[0]*final_stack.shape[1]*final_stack.shape[2]
+        #print(con_df_px/total_num_pixel)
+        metrix_img = calc_metric(con_img_list[0])
+        metrix_px = calc_metric(con_df_px)
         
-
-else:
-#    no_tif.append(i)##commented out for-loop for img_folder
-    print("no match")
-##commented out for-loop for img_folder
-#print ("has tif: ", has_tif)
-#print ("no tif: ", no_tif)
-#
-#print("notif")
-#for j in no_tif:
-#    print(all_folders_name[j])
+        con_df_cluster, tp_area, fp_area,tp_height,fp_height,tp_width,fp_width = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10, chunk_folder=chunk_folder,is_save=True)    
+            
+        metrix_cluster = calc_metric(con_df_cluster)
+        
+        if is_stem==True:
+            true_emb_bubble_area = subset_vec_set(bubble_area_prop_vec,start_img_idx,np.where(true_has_emb)[0],output_row_name='bubble_area_prop')
+            poor_qual_bubble_area = subset_vec_set(bubble_area_prop_vec,start_img_idx,poor_qual_set,output_row_name='bubble_area_prop')
+        if is_save ==True:
+            with open (chunk_folder + '/confusion_mat_file.txt',"w") as f:
+                f.write('img level metric:\n')
+                f.write(str(metrix_img))
+                f.write(str("\n\n"))
+                f.write(str(con_img_list[0]))
+                f.write(str("\n\n"))
+                f.write(f'false positive img index: {con_img_list[1]+(start_img_idx-1)}')
+                f.write(str("\n\n"))
+                f.write(f'false negative img index: {con_img_list[2]+(start_img_idx-1)}')
+                f.write(str("\n\n"))
+                f.write('pixel level metric:\n')
+                f.write(str(metrix_px))
+                f.write(str("\n\n"))
+                f.write(f'con_df_px: \n {con_df_px}')
+                f.write(str("\n\n"))
+                f.write(f'probability of pix: \n {(con_df_px/total_num_pixel)}')
+                f.write(str("\n\n"))
+                f.write('cluster level metric:\n')
+                f.write(str(metrix_cluster))
+                f.write(str("\n\n"))
+                f.write(f'con_df_cluster: \n {con_df_cluster}')
+                if is_stem==True:
+                    f.write(str("\n\n"))
+                    f.write(f'percentage of img w/ bubble: {len(has_bubble_idx)}/{(img_num-1)} = {has_bubble_per} %\n')
+                    f.write('img index with bubble:\n')
+                    f.write(str(has_bubble_idx+(start_img_idx-1)))
+                    f.write(str("\n\n"))
+                    f.write(f'poor_qual_set size: {len(poor_qual_set)}/{(img_num-1)} = {round(len(poor_qual_set)/(img_num-1)*100,2)} %\n')
+                    f.write(f'poor_qual_set:\n{poor_qual_set}\n')
+                    f.write(f'bubble_area_prop of poor_qual_set:\n{poor_qual_bubble_area}\n\n')
+                    f.write(f'bubble_area_prop of true_emb:\n{true_emb_bubble_area}')
+                    f.write(str("\n\n"))
+                    f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {round(len(poor_qual_set2)/(img_num-1)*100,2)} %\n')
+                    f.write(f'poor_qual_set2:\n{poor_qual_set2}')
+    else:#match ==False, no more confusion matrix
+        if is_stem==True:
+            poor_qual_bubble_area = subset_vec_set(bubble_area_prop_vec,start_img_idx,poor_qual_set,output_row_name='bubble_area_prop')
+        has_emb_idx = np.where(has_embolism)[0]
+        if is_save ==True:
+            with open (chunk_folder + '/results_summary.txt',"w") as f:
+                f.write(f'percentage of img predicted to have emb: {len(has_emb_idx)}/{(img_num-1)} = {round(len(has_emb_idx)/(img_num-1)*100,2)} %\n')
+                f.write('img idx of predicted to have emb:\n')
+                f.write(str(has_emb_idx))
+                if is_stem==True:
+                    f.write(f'percentage of img w/ bubble: {len(has_bubble_idx)}/{(img_num-1)} = {has_bubble_per} %\n')
+                    f.write('img index with bubble:\n')
+                    f.write(str(has_bubble_idx+(start_img_idx-1)))
+                    f.write(str("\n\n"))
+                    f.write(f'poor_qual_set size: {len(poor_qual_set)}/{(img_num-1)} = {round(len(poor_qual_set)/(img_num-1)*100,2)} %\n')
+                    f.write(f'poor_qual_set:\n{poor_qual_set}\n')
+                    f.write(f'bubble_area_prop of poor_qual_set:\n{poor_qual_bubble_area}\n\n')
+                    f.write(str("\n\n"))
+                    f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {round(len(poor_qual_set2)/(img_num-1)*100,2)} %\n')
+                    f.write(f'poor_qual_set2:\n{poor_qual_set2}')
+        
             
