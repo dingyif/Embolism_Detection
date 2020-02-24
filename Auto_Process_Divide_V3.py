@@ -9,31 +9,35 @@ import os,shutil#for creating/emptying folders
 import re
 import sys
 from detect_by_contour_v4 import plot_gray_img, to_binary,plot_img_sum, plot_overlap_sum
-from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB, detect_bubble
+from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB, detect_bubble, calc_bubble_area_prop, subset_vec_2_sets
 from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
 from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric
 from density import density_of_a_rect
 from detect_by_filter_fx import median_filter_stack
 import math
-import seaborn as sns
+import pandas as pd
 
 folder_list = []
 has_tif = []
 no_tif =[]
 #disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-disk_path = 'F:/Diane/Col/research/code/'
+disk_path = 'E:/Diane/Col/research/code/'
 img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
-img_folder = all_folders_dir[4]
+img_folder = all_folders_dir[3]
 
 #Need to process c folder
 #img_folder_c = all_folders_dir[14:]
 #img_folder = img_folder_c[2]
 print(f'img folder name : {img_folder}')
 
-img_paths = sorted(glob.glob(img_folder + '/*.png'))
+if "ALCLAT5.2_Stem" in img_folder:#jpg files
+    img_paths = sorted(glob.glob(img_folder + '/*.jpg'))
+else:
+    img_paths = sorted(glob.glob(img_folder + '/*.png'))
+
 tiff_paths = sorted(glob.glob(img_folder + '/*.tif'))
 match = False
 #make sure it have tif file in there
@@ -65,7 +69,7 @@ if match:
     print(f'Image Folder Name: {img_folder_name}')
 
     chunk_idx = 0#starts from 0
-    chunk_size = 600#process 600 images a time
+    chunk_size = 50#process 600 images a time
     #print('index: {}'.format(i))
     is_save = True
 
@@ -82,7 +86,7 @@ if match:
     if is_save==True:
         #create a "folder" for saving resulting tif files such that next time when re-run this program,
         #the resulting tif file won't be viewed as the most recent modified tiff file
-        chunk_folder = os.path.join(img_folder,img_folder_name,'v9.3_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
+        chunk_folder = os.path.join(img_folder,img_folder_name,'v9.4_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
         if not os.path.exists(chunk_folder):#create new folder if not existed
             os.makedirs(chunk_folder)
         else:#empty the existing folder
@@ -90,7 +94,8 @@ if match:
             os.makedirs(chunk_folder)#create 
     
     img_num = end_img_idx-start_img_idx + 1
-
+    
+    ##manually delete tl_0002_0001_20190726_103828.jpg.t0002.th.jpg for ALCLAT5.2_Stem
     img_re_idx = 0 #relative index for images in start_img_idx to end_img_idx
     for filename in img_paths[start_img_idx-1:end_img_idx]: #original img: 958 rowsx646 cols
         img=Image.open(filename).convert('L') #.convert('L'): gray-scale # 646x958
@@ -250,29 +255,8 @@ if match:
         else:
             print("finish bubble_stack")
         
-        '''
-        '''
-        bubble_area_prop_vec=np.sum(np.sum(bubble_stack,2),1)/np.sum(np.sum(is_stem_mat2,2),1)
-#        '''
-#        To decide bubble area th--> considered as poor quality -->no emb:
-#        '''
-#        num_bins=50
-#        n_th, bins_th, patches_th= plt.hist(bubble_area_prop_vec,bins=num_bins)
-#        
-#        #don't show 0
-#        plt.figure()
-#        plt.plot(bins_th[2:],n_th[1:])
-#        #plt.xlim(bins_th[1],bins_th[-1])
-#        plt.ylabel("frequency")
-#        plt.xlabel("bubble area")
-#        plt.title("histogram of bubble area (ignoring the 1st bin)")
-#        
-#        plt.figure()
-#        plt.plot(range(len(bubble_area_prop_vec)),bubble_area_prop_vec)
-#        plt.ylabel("bubble area")
-#        plt.xlabel("image index")
-#        plt.title("bubble area in each image")
-#        
+        bubble_area_prop_vec = calc_bubble_area_prop(bubble_stack,is_stem_mat2,chunk_folder,is_save=True,plot_interm=True)
+        
         
         poor_qual_set = np.where(bubble_area_prop_vec >= bubble_area_prop_max)[0]
 
@@ -522,49 +506,11 @@ if match:
     metrix_img = calc_metric(con_img_list[0])
     metrix_px = calc_metric(con_df_px)
     
-    con_df_cluster, tp_area, fp_area,tp_height,fp_height,tp_width,fp_width = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10)
-    
-    plt.figure()
-    ax = sns.distplot(tp_area,label = 'True Positive',norm_hist=False,kde=False, bins=50)#assumes max(tp_area)>max(fp_area)?
-    ax = sns.distplot(fp_area,label = 'False Positive',norm_hist=False,kde=False, bins=50)
-    ax.set_title('Connected Component Area Histogram (TP vs FP)')
-    ax.set_ylabel('Counts')
-    ax.set_xlabel('Area of a Connected Component')
-    ax.legend()
-    if is_save == True:
-        plt.savefig(chunk_folder + '/m4_TP FP Histogram.jpg')
-    
-    plt.figure()
-    ax = sns.distplot(tp_area,label = 'True Positive',norm_hist=True,kde=False, bins=50)
-    ax = sns.distplot(fp_area,label = 'False Positive',norm_hist=True,kde=False, bins=50)
-    ax.set_title('Connected Component Area Histogram (TP vs FP)')
-    ax.set_ylabel('Density')
-    ax.set_xlabel('Area of a Connected Component')
-    ax.legend()
-    if is_save == True:
-        plt.savefig(chunk_folder + '/m4_TP FP Histogram_Density.jpg')
-        
-    plt.figure()
-    ax = sns.distplot(tp_height,label = 'True Positive',norm_hist=True,kde=False, bins=50)
-    ax = sns.distplot(fp_height,label = 'False Positive',norm_hist=True,kde=False, bins=50)
-    ax.set_title('Connected Component Height Histogram (TP vs FP)')
-    ax.set_ylabel('Density')
-    ax.set_xlabel('Height of a Connected Component')
-    ax.legend()
-    if is_save == True:
-        plt.savefig(chunk_folder + '/m4_Height Histogram_Density.jpg')
-    
-    plt.figure()
-    ax = sns.distplot(tp_width,label = 'True Positive',norm_hist=True,kde=False, bins=50)
-    ax = sns.distplot(fp_width,label = 'False Positive',norm_hist=True,kde=False, bins=50)
-    ax.set_title('Connected Component Width Histogram (TP vs FP)')
-    ax.set_ylabel('Density')
-    ax.set_xlabel('Width of a Connected Component')
-    ax.legend()
-    if is_save == True:
-        plt.savefig(chunk_folder + '/m4_Width Histogram_Density.jpg')
+    con_df_cluster, tp_area, fp_area,tp_height,fp_height,tp_width,fp_width = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10, chunk_folder=chunk_folder,is_save=True)    
         
     metrix_cluster = calc_metric(con_df_cluster)
+    
+    true_emb_bubble_area,poor_qual_bubble_area = subset_vec_2_sets(bubble_area_prop_vec,start_img_idx,np.where(true_has_emb)[0],poor_qual_set,output_row_name='bubble_area_prop')
     if is_save ==True:
         with open (chunk_folder + '/confusion_mat_file.txt',"w") as f:
             f.write('img level metric:\n')
@@ -592,10 +538,12 @@ if match:
             f.write('img index with bubble:\n')
             f.write(str(has_bubble_idx+(start_img_idx-1)))
             f.write(str("\n\n"))
-            f.write(f'poor_qual_set size: {len(poor_qual_set)}/{(img_num-1)} = {len(poor_qual_set)/(img_num-1)} %\n')
-            f.write(f'poor_qual_set:\n{poor_qual_set}')
+            f.write(f'poor_qual_set size: {len(poor_qual_set)}/{(img_num-1)} = {round(len(poor_qual_set)/(img_num-1)*100,2)} %\n')
+            f.write(f'poor_qual_set:\n{poor_qual_set}\n')
+            f.write(f'bubble_area_prop of poor_qual_set:\n{poor_qual_bubble_area}\n\n')
+            f.write(f'bubble_area_prop of true_emb:\n{true_emb_bubble_area}')
             f.write(str("\n\n"))
-            f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {len(poor_qual_set2)/(img_num-1)} %\n')
+            f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {round(len(poor_qual_set2)/(img_num-1)*100,2)} %\n')
             f.write(f'poor_qual_set2:\n{poor_qual_set2}')
     
         
