@@ -29,13 +29,14 @@ import datetime
 #############################################################################
 def plot_img_sum(img_3d,title_str,img_folder,is_save=False):
     sum_of_img = np.sum(np.sum(img_3d,axis=2),axis=1)#sum
-    plt.figure()
+    fig = plt.figure()
     plt.plot(range(len(sum_of_img)),sum_of_img)
     plt.ylabel("sum of pixel values in an image")
     plt.xlabel("image index")
     plt.title(title_str)
     if is_save==True:
         plt.savefig(img_folder+'/m0_'+title_str+'.jpg',bbox_inches='tight')
+    plt.close(fig)
     # x-axis= image index. y-axis=sum of each img
     return(sum_of_img)
 
@@ -47,7 +48,7 @@ def plot_overlap_sum(is_stem_mat, title_str ,chunk_folder, is_save = False):
     sum_is_stem_mat = is_stem_mat[1:,:,:] + is_stem_mat[:-1,:,:]
     prop = np.sum(np.sum((sum_is_stem_mat==2),2),1)/np.sum(np.sum((sum_is_stem_mat>=1),2),1)
     #AND(=overlap)/OR --> if not close to 1 --> shifting 
-    plt.figure()
+    fig = plt.figure()
     plt.plot(range(len(prop)),prop)
     plt.ylabel("portion of overlap area")
     plt.xlabel("image relative index")
@@ -55,6 +56,7 @@ def plot_overlap_sum(is_stem_mat, title_str ,chunk_folder, is_save = False):
 
     if is_save == True:
         plt.savefig(chunk_folder + "/m1_overlap_area_hist_img.jpg",bbox_inches='tight')
+    plt.close(fig)
     return(prop)
     
 #############################################################################
@@ -761,7 +763,7 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
     con_df = pd.DataFrame(con_mat, columns=column_names, index=row_names)
     
     #plot results
-    plt.figure()
+    fig = plt.figure()
     ax = sns.distplot(tp_area,label = 'True Positive',norm_hist=False,kde=False, bins=50)#assumes max(tp_area)>max(fp_area)?
     ax = sns.distplot(fp_area,label = 'False Positive',norm_hist=False,kde=False, bins=50)
     ax.set_title('Connected Component Area Histogram (TP vs FP)')
@@ -770,8 +772,9 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
     ax.legend()
     if is_save == True:
         plt.savefig(chunk_folder + '/m4_TP FP Histogram.jpg')
+    plt.close(fig)
     
-    plt.figure()
+    fig = plt.figure()
     ax = sns.distplot(tp_area,label = 'True Positive',norm_hist=True,kde=False, bins=50)
     ax = sns.distplot(fp_area,label = 'False Positive',norm_hist=True,kde=False, bins=50)
     ax.set_title('Connected Component Area Histogram (TP vs FP)')
@@ -780,8 +783,9 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
     ax.legend()
     if is_save == True:
         plt.savefig(chunk_folder + '/m4_TP FP Histogram_Density.jpg')
+    plt.close(fig)
         
-    plt.figure()
+    fig = plt.figure()
     ax = sns.distplot(tp_height,label = 'True Positive',norm_hist=True,kde=False, bins=50)
     ax = sns.distplot(fp_height,label = 'False Positive',norm_hist=True,kde=False, bins=50)
     ax.set_title('Connected Component Height Histogram (TP vs FP)')
@@ -790,8 +794,9 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
     ax.legend()
     if is_save == True:
         plt.savefig(chunk_folder + '/m4_Height Histogram_Density.jpg')
+    plt.close(fig)
     
-    plt.figure()
+    fig = plt.figure()
     ax = sns.distplot(tp_width,label = 'True Positive',norm_hist=True,kde=False, bins=50)
     ax = sns.distplot(fp_width,label = 'False Positive',norm_hist=True,kde=False, bins=50)
     ax.set_title('Connected Component Width Histogram (TP vs FP)')
@@ -800,6 +805,7 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
     ax.legend()
     if is_save == True:
         plt.savefig(chunk_folder + '/m4_Width Histogram_Density.jpg')
+    plt.close(fig)
     return(con_df,tp_area,fp_area,tp_height,fp_height,tp_width,fp_width)
 
 
@@ -953,45 +959,50 @@ def detect_bubble(input_stack,blur_radius=11,hough_param1=25,hough_param2=10, mi
 def calc_bubble_area_prop(bubble_stack,is_stem_mat2,chunk_folder,is_save=False,plot_interm=True):
     '''
     calculate bubble area/stem area of each img
-    plot_interm has to be True if want to use is_save=True
     '''
     bubble_area_prop_vec=np.sum(np.sum(bubble_stack,2),1)/np.sum(np.sum(is_stem_mat2,2),1)
     
-    if plot_interm==True:
+
+
+    '''
+    To decide bubble_area_prop_max--> considered as poor quality -->no emb:
+    '''
+    #from v9.4
+    #bound for bubble_area_prop_max: foldername(chunk_size) / largest bubble_area has emb img_idx / smallest bubble_area no emb img_idx
+    #>0.2,0.081, <0.31: cas5_stem(50) / 28 (not poor qual by eyes, but thought emb as bubble),1 / 8
+    #>0.159, <0.268: cas2.2_stem(300) / 4(bubble_area_prop=1.025), 2nd largest bubble_area has emb img_idx =232 / 40
+    #>0.059, <0.31: inglau4_stem(100) / 52 / 8
+    #>0.003, --: inglau3_stem(200) / 177 / --
+    #>0.024, <0.213,0.222,0.389: Alclat2_stem(400) / 324 / 0,1,54
+    #look at max cc area of each img in bubble_stack: to separate cases for a2_stem and c5_stem: 
+    #c2.2 img_idx=5,40
+    num_bins=50
+    fig = plt.figure()
+    n_th, bins_th, patches_th= plt.hist(bubble_area_prop_vec,bins=num_bins)
+    if plot_interm==False:
+        plt.close(fig)
     
-        '''
-        To decide bubble_area_prop_max--> considered as poor quality -->no emb:
-        '''
-        #from v9.4
-        #bound for bubble_area_prop_max: foldername(chunk_size) / largest bubble_area has emb img_idx / smallest bubble_area no emb img_idx
-        #>0.2,0.081, <0.31: cas5_stem(50) / 28 (not poor qual by eyes, but thought emb as bubble),1 / 8
-        #>0.159, <0.268: cas2.2_stem(300) / 4(bubble_area_prop=1.025), 2nd largest bubble_area has emb img_idx =232 / 40
-        #>0.059, <0.31: inglau4_stem(100) / 52 / 8
-        #>0.003, --: inglau3_stem(200) / 177 / --
-        #>0.024, <0.213,0.222,0.389: Alclat2_stem(400) / 324 / 0,1,54
-        #look at max cc area of each img in bubble_stack: to separate cases for a2_stem and c5_stem: 
-        #c2.2 img_idx=5,40
-        num_bins=50
-        plt.figure()
-        n_th, bins_th, patches_th= plt.hist(bubble_area_prop_vec,bins=num_bins)
+    #usually 1st bin is way TOO large --> don't show 1st bin(0)in hist for better visualization
+    fig1 = plt.figure()
+    plt.plot(bins_th[2:],n_th[1:])
+    #plt.xlim(bins_th[1],bins_th[-1])
+    plt.ylabel("frequency")
+    plt.xlabel("bubble area")
+    plt.title("histogram of bubble area (ignoring the 1st bin)")
+    if is_save == True:
+        plt.savefig(chunk_folder + '/m4.5_histogram of bubble area (ignoring the 1st bin).jpg')
+    if plot_interm==False:
+        plt.close(fig1)
     
-        #usually 1st bin is way TOO large --> don't show 1st bin(0)in hist for better visualization
-        plt.figure()
-        plt.plot(bins_th[2:],n_th[1:])
-        #plt.xlim(bins_th[1],bins_th[-1])
-        plt.ylabel("frequency")
-        plt.xlabel("bubble area")
-        plt.title("histogram of bubble area (ignoring the 1st bin)")
-        if is_save == True:
-            plt.savefig(chunk_folder + '/m4.5_histogram of bubble area (ignoring the 1st bin).jpg')
-        
-        plt.figure()
-        plt.plot(range(len(bubble_area_prop_vec)),bubble_area_prop_vec)
-        plt.ylabel("bubble area")
-        plt.xlabel("image index")
-        plt.title("bubble area in each image")
-        if is_save == True:
-            plt.savefig(chunk_folder + '/m4.5_bubble area in each image.jpg')
+    fig2 = plt.figure()
+    plt.plot(range(len(bubble_area_prop_vec)),bubble_area_prop_vec)
+    plt.ylabel("bubble area")
+    plt.xlabel("image index")
+    plt.title("bubble area in each image")
+    if is_save == True:
+        plt.savefig(chunk_folder + '/m4.5_bubble area in each image.jpg')
+    if plot_interm==False:
+        plt.close(fig2)
     return(bubble_area_prop_vec)
 
 def max_cc_area(img):
@@ -1003,7 +1014,6 @@ def max_cc_area(img):
 def calc_bubble_cc_max_area_p(bubble_stack,is_stem_mat2,chunk_folder,is_save=False,plot_interm=True):
     '''
     calculate max(bubble connected component area)/stem area of each img
-    plot_interm has to be True if want to use is_save=True
     '''
     #motivation: look at max cc area of each img in bubble_stack: to separate cases for a2_stem and c5_stem: 
     #c2.2 img_idx=5,40
@@ -1026,32 +1036,37 @@ def calc_bubble_cc_max_area_p(bubble_stack,is_stem_mat2,chunk_folder,is_save=Fal
         bubble_cc_max_area_vec[img_idx]=max_cc_area(img)
     bubble_cc_max_area_prop_vec = bubble_cc_max_area_vec/np.sum(np.sum(is_stem_mat2,2),1)
     
-    if plot_interm==True:
     
-        '''
-        To decide bubble_cc_max_area_max--> considered as poor quality -->no emb:
-        '''
-        num_bins=50
-        plt.figure()
-        n_th, bins_th, patches_th= plt.hist(bubble_cc_max_area_prop_vec,bins=num_bins)
+    '''
+    To decide bubble_cc_max_area_max--> considered as poor quality -->no emb:
+    '''
+    num_bins=50
+    fig = plt.figure()
+    n_th, bins_th, patches_th= plt.hist(bubble_cc_max_area_prop_vec,bins=num_bins)
+    if plot_interm==False:
+        plt.close(fig)
+
+    #usually 1st bin is way TOO large --> don't show 1st bin(0)in hist for better visualization
+    fig1 = plt.figure()
+    plt.plot(bins_th[2:],n_th[1:])
+    #plt.xlim(bins_th[1],bins_th[-1])
+    plt.ylabel("frequency")
+    plt.xlabel("max(bubble c.c. area)")
+    plt.title("histogram of max of bubble connected component area(ignoring the 1st bin)")
+    if is_save == True:
+        plt.savefig(chunk_folder + '/m4.6_histogram of max of bubble connected component area (ignoring the 1st bin).jpg')
+    if plot_interm==False:
+        plt.close(fig1)
     
-        #usually 1st bin is way TOO large --> don't show 1st bin(0)in hist for better visualization
-        plt.figure()
-        plt.plot(bins_th[2:],n_th[1:])
-        #plt.xlim(bins_th[1],bins_th[-1])
-        plt.ylabel("frequency")
-        plt.xlabel("max(bubble c.c. area)")
-        plt.title("histogram of max of bubble connected component area(ignoring the 1st bin)")
-        if is_save == True:
-            plt.savefig(chunk_folder + '/m4.6_histogram of max of bubble connected component area (ignoring the 1st bin).jpg')
-        
-        plt.figure()
-        plt.plot(range(len(bubble_cc_max_area_prop_vec)),bubble_cc_max_area_prop_vec)
-        plt.ylabel("max(bubble c.c. area)")
-        plt.xlabel("image index")
-        plt.title("max(bubble c.c. area) in each image")
-        if is_save == True:
-            plt.savefig(chunk_folder + '/m4.6_max(bubble c.c. area) in each image.jpg')
+    fig2 = plt.figure()
+    plt.plot(range(len(bubble_cc_max_area_prop_vec)),bubble_cc_max_area_prop_vec)
+    plt.ylabel("max(bubble c.c. area)")
+    plt.xlabel("image index")
+    plt.title("max(bubble c.c. area) in each image")
+    if is_save == True:
+        plt.savefig(chunk_folder + '/m4.6_max(bubble c.c. area) in each image.jpg')
+    if plot_interm==False:
+        plt.close(fig2)
     return(bubble_cc_max_area_prop_vec)
 
 def subset_vec_set(input_vec,start_img_idx,set1_idx,output_row_name):
