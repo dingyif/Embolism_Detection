@@ -688,7 +688,7 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
         fp_height.append(cc_height[0])
         fp_width.append(cc_width[0])
         
-        f_pos += num_cc
+        f_pos += num_cc - 1
         
 #        num_cc_fp, mat_cc_fp = cv2.connectedComponents(smooth_fp_img.astype(np.uint8))
 #        #add up the false postive cluster
