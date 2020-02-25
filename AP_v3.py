@@ -12,7 +12,7 @@ from detect_by_contour_v4 import plot_gray_img, to_binary,plot_img_sum, plot_ove
 from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB
 from detect_by_contour_v4 import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set
 from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
-from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric
+from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric,print_used_time
 from density import density_of_a_rect
 from detect_by_filter_fx import median_filter_stack
 import math
@@ -30,7 +30,7 @@ folder_idx_arg = args.shard#folder index from args
 '''
 user-specified arguments
 '''
-#folder_idx_arg = 5
+#folder_idx_arg = 66
 disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 #disk_path = 'E:/Diane/Col/research/code/'
 has_processed = False#Working on Processed data or Unprocessed data
@@ -125,7 +125,7 @@ else:
     
     img_num = end_img_idx-start_img_idx + 1
     
-    
+    ignore_num = 0 
     img_re_idx = 0 #relative index for images in start_img_idx to end_img_idx
     for filename in img_paths[start_img_idx-1:]: #original img: 958 rowsx646 cols
         #can't just use end_img_idx for img_paths cuz of th.jpg
@@ -145,13 +145,18 @@ else:
                 img_stack[img_re_idx] = img_array
                 img_re_idx = img_re_idx + 1
             else:
-                #to avoid error produced by th.jpg: 
+                #to avoid error produced by th.jpg or preview.png
                 #ValueError: could not broadcast input array from shape (768,1024) into shape (1944,2592)
                 #ex: in ImagesNotYetProcessed\dacexc2.2_stem
                 #(I manually deleted Processed/ALCLAT5.2_Stem/tl_0002_0001_20190726_103828.jpg.t0002.th.jpg)
                 print("Different img size",filename)
                 img_paths.remove(filename)#remove from the list -->won't cause problem in extract_foregroundRGB, add_img_info_to_stack
-            
+                ignore_num += 1
+    
+    if ignore_num >0:
+        img_num = img_num - ignore_num# so that there won't  be error with add_img_info_to_stack
+        img_stack = img_stack[:img_num,:,:]
+    
         
     print("finish loading img")
     #############################################################################
@@ -174,6 +179,9 @@ else:
     #help to clip all positive px value to 1
     bin_stack = to_binary(th_stack)
     print("bin_stack done")
+    
+    #time
+    print_used_time(start_time)
     
     '''
     Foreground Background Segmentation
@@ -401,7 +409,7 @@ else:
         window_idx_max = math.ceil(bin_stack.shape[0]/window_size)
         for window_idx in range(0,window_idx_max):
             window_start_idx = window_idx*window_size
-            window_end_idx = min((window_idx+1)*window_size,(end_img_idx-start_img_idx))
+            window_end_idx = min((window_idx+1)*window_size,img_num-1)
             # "-start_img_idx": because start_img_idx might not start at 0
             current_window_size = window_end_idx-window_start_idx#img_num mod window_size might not be 0 
             
@@ -495,6 +503,9 @@ else:
     
     print("2nd stage done")
     
+    #time
+    diff_min_sec=print_used_time(start_time)
+    
     if match==True:
         #combined with true tif file
         true_mask  = tiff.imread(up_2_date_tiff)#tiff.imread(img_folder+'/4 Mask Substack ('+str(start_img_idx)+'-'+str(end_img_idx-1)+') clean.tif')
@@ -516,11 +527,6 @@ else:
         tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
         print("saved tif files")
     
-    #time
-    finish_time = datetime.datetime.now()
-    seconds_in_day = 24 * 60 * 60
-    difference = finish_time - start_time
-    diff_min_sec = divmod(difference.days * seconds_in_day + difference.seconds, 60)
     
     has_embolism = img_contain_emb(final_stack)
     
@@ -577,6 +583,7 @@ else:
             poor_qual_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,poor_qual_set_cc,output_row_name='bubble_cc_max_area_prop')
         if is_save ==True:
             with open (chunk_folder + '/confusion_mat_file.txt',"w") as f:
+                f.write(f'used time: {diff_min_sec[0]} min {diff_min_sec[1]} sec\n\n')
                 f.write('img level metric:\n')
                 f.write(str(metrix_img))
                 f.write(str("\n\n"))
@@ -615,7 +622,7 @@ else:
                     f.write(str("\n\n"))
                     f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {round(len(poor_qual_set2)/(img_num-1)*100,2)} %\n')
                     f.write(f'poor_qual_set2:\n{poor_qual_set2}\n\n')
-                    f.write(f'time: {diff_min_sec[0]} min {diff_min_sec[1]} sec')
+                    
     else:#match ==False, no more confusion matrix
         if is_stem==True:
             poor_qual_bubble_area = subset_vec_set(bubble_area_prop_vec,start_img_idx,poor_qual_set,output_row_name='bubble_area_prop')
@@ -623,6 +630,7 @@ else:
         has_emb_idx = np.where(has_embolism)[0]
         if is_save ==True:
             with open (chunk_folder + '/results_summary.txt',"w") as f:
+                f.write(f'used time: {diff_min_sec[0]} min {diff_min_sec[1]} sec\n\n')
                 f.write(f'percentage of img predicted to have emb: {len(has_emb_idx)}/{(img_num-1)} = {round(len(has_emb_idx)/(img_num-1)*100,2)} %\n')
                 f.write('img idx of predicted to have emb:\n')
                 f.write(str(has_emb_idx))
@@ -637,6 +645,6 @@ else:
                     f.write(str("\n\n"))
                     f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {round(len(poor_qual_set2)/(img_num-1)*100,2)} %\n')
                     f.write(f'poor_qual_set2:\n{poor_qual_set2}')
-                    f.write(f'time: {diff_min_sec[0]} min {diff_min_sec[1]} sec')
+                
     
             

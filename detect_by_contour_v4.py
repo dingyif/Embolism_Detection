@@ -21,6 +21,7 @@ import gc
 import density#self-written density.py
 from collections import Counter#for count 1,2 in overlap mat
 import seaborn as sns
+import datetime
 #############################################################################
 #    Sanity check:
 #    see if the sum of pixel values in an image of diff_pos_stack
@@ -685,6 +686,8 @@ def confusion_mat_cluster(pred_stack, true_stack, has_embolism:list, true_has_em
         fp_height.append(cc_height[0])
         fp_width.append(cc_width[0])
         
+        f_pos += num_cc
+        
 #        num_cc_fp, mat_cc_fp = cv2.connectedComponents(smooth_fp_img.astype(np.uint8))
 #        #add up the false postive cluster
 #        f_pos += num_cc_fp - 1
@@ -1010,7 +1013,7 @@ def calc_bubble_cc_max_area_p(bubble_stack,is_stem_mat2,chunk_folder,is_save=Fal
     #bound for bubble_area_prop_max: foldername(chunk_size) / largest bubble_area has emb img_idx / smallest bubble_area no emb img_idx
     #>0.077, <0.23: cas5_stem(50) / 24 / 2
     #>0.019, <0.2 Alclat2_stem(400) / 364 / 0 (should decrease theshold s.t. img_idx=1 --> shift )
-    #>0.073, <0.247 cas2.2_stem(300) / 232 / 9 (ignore img_idx=4: true_emb in poor qual)
+    #>0.073, <0.247 cas2.2_stem(300) / 232 / 9 (ignore img_idx=4: true_emb in poor qual. <0.149: img_idx=9, poor qual)
     #>0.003, --: inglau3_stem(200) / 177 / -- (exactly same as before cuz everything looks nice after 1st stage :) )
     #>0.041,<0.212: inglau4_stem(100) / 52 / 5 (should decrease theshold  cuz more fp, img_idx = 8(shift) --> <0.1689)
         
@@ -1065,3 +1068,12 @@ def subset_vec_set(input_vec,start_img_idx,set1_idx,output_row_name):
     set1_pd=pd.DataFrame(img_idx_vec[:,set1_idx][:,relative_arg_order],index=['img_idx',output_row_name])#Sorted by bubble_area_prop
     
     return set1_pd
+
+def print_used_time(start_time):
+    #time
+    finish_time = datetime.datetime.now()
+    seconds_in_day = 24 * 60 * 60
+    difference = finish_time - start_time
+    diff_min_sec = divmod(difference.days * seconds_in_day + difference.seconds, 60)
+    print('used time: ',diff_min_sec[0],'min ',diff_min_sec[1],'sec')
+    return(diff_min_sec)
