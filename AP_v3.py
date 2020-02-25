@@ -26,7 +26,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--shard', type=int)
 args = parser.parse_args()
 folder_idx_arg = args.shard#folder index from args
-
 '''
 user-specified arguments
 '''
@@ -38,6 +37,7 @@ chunk_idx = 0#starts from 0
 chunk_size = 4000#the number of imgs to process at a time
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
+plot_interm = False
 
 folder_list = []
 has_tif = []
@@ -191,7 +191,8 @@ else:
     '''
     if is_stem==True:
         mean_img = np.mean(bin_stack,axis=0)
-        plot_gray_img(mean_img)
+        if plot_interm==True:
+            plot_gray_img(mean_img)
         if is_save==True:
             plt.imsave(chunk_folder + "/m1_mean_of_binary_img.jpg",mean_img,cmap='gray')
     
@@ -253,7 +254,6 @@ else:
         num_px_max = 0.02#0.008 #ALCLAT1_leaf img_idx=83 true emb part: 0.019
         quantile_per = 0.95
         quantile_th = 0.75#0.7
-        plot_interm = False
         
         emb_pro_th_min = 0.0001
         rect_width_th = 0.05#100/1286
@@ -283,7 +283,6 @@ else:
         second_width_max = 0.85#cas2.2 img_idx=232, width=0.41/ img_idx=208, width=0.8
         second_rect_dens_max = 0.3
         second_area_max = 0.2
-        plot_interm=False
     
     bin_stem_stack = bin_stack*is_stem_mat2
     '''1st stage'''
@@ -310,10 +309,10 @@ else:
         else:
             print("finish bubble_stack")
         
-        bubble_area_prop_vec = calc_bubble_area_prop(bubble_stack,is_stem_mat2,chunk_folder,is_save=is_save,plot_interm=True)
+        bubble_area_prop_vec = calc_bubble_area_prop(bubble_stack,is_stem_mat2,chunk_folder,is_save=is_save,plot_interm=plot_interm)
         poor_qual_set = np.where(bubble_area_prop_vec >= bubble_area_prop_max)[0]
         
-        bubble_cc_max_area_prop_vec = calc_bubble_cc_max_area_p(bubble_stack,is_stem_mat2,chunk_folder,is_save=is_save,plot_interm=True)
+        bubble_cc_max_area_prop_vec = calc_bubble_cc_max_area_p(bubble_stack,is_stem_mat2,chunk_folder,is_save=is_save,plot_interm=plot_interm)
         poor_qual_set_cc = np.where(bubble_cc_max_area_prop_vec>=bubble_cc_max_area_prop_max)[0]
         '''
         shift detection
@@ -331,14 +330,14 @@ else:
                 stem_area = np.sum(is_stem_mat2[img_idx,:,:])
                 final_stack1[img_idx,:,:] = find_emoblism_by_filter_contour(bin_stem_stack,filter_stack,img_idx,stem_area = stem_area,final_area_th = final_area_th,
                                                             area_th=area_th, area_th2=area_th2,ratio_th=ratio_th,e2_sz=1,o2_sz=2,cl2_sz=2,c1_sz=c1_sz,d1_sz=d1_sz,
-                                                            plot_interm=False,max_emb_prop=max_emb_prop,density_th=density_th,num_px_th=num_px_th)
+                                                            plot_interm=plot_interm,max_emb_prop=max_emb_prop,density_th=density_th,num_px_th=num_px_th)
             #TODO: closing/dilate param should depend on the width of stem (now it's depend on width of img)
     else:
         for img_idx in range(0, bin_stack.shape[0]):
             stem_area = np.sum(is_stem_mat2[img_idx,:,:])
             final_stack1[img_idx,:,:] = find_emoblism_by_contour(bin_stem_stack,img_idx,stem_area = stem_area,final_area_th = final_area_th,
                                                         area_th=area_th, area_th2=area_th2,ratio_th=ratio_th,e2_sz=1,o2_sz=2,cl2_sz=2,
-                                                        plot_interm=False,max_emb_prop=max_emb_prop,density_th=density_th,num_px_th=num_px_th)
+                                                        plot_interm=plot_interm,max_emb_prop=max_emb_prop,density_th=density_th,num_px_th=num_px_th)
     print("1st stage done")
     '''2nd stage: reduce false positive'''
     if is_stem==True:
@@ -422,7 +421,8 @@ else:
             if is_save==True:
                 plt.imsave(chunk_folder + "/"+str(window_idx)+"_not_emb_mask.jpg",not_emb_mask,cmap='gray')
             not_emb_mask_exp = cv2.dilate(not_emb_mask.astype(np.uint8), np.ones((10,10),np.uint8),iterations = 1)#expand a bit
-            plot_gray_img(not_emb_mask_exp,str(window_idx)+"_not_emb_mask_exp")
+            if plot_interm==True:
+                plot_gray_img(not_emb_mask_exp,str(window_idx)+"_not_emb_mask_exp")
             if is_save==True:
                 plt.imsave(chunk_folder + "/"+str(window_idx)+"_not_emb_mask_exp.jpg",not_emb_mask_exp,cmap='gray')
             emb_cand_mask = -(not_emb_mask_exp-1)#inverse, switch 0 and 1
@@ -563,6 +563,7 @@ else:
             
             for i in con_img_list[3]:
                 plt.imsave(chunk_folder + "/true_positive/"+str(i+(start_img_idx-1))+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
+
             np.savetxt(chunk_folder + '/false_positive_index.txt', con_img_list[1]+(start_img_idx-1),fmt='%i')#integer format
             np.savetxt(chunk_folder + '/false_negative_index.txt', con_img_list[2]+(start_img_idx-1),fmt='%i')
             np.savetxt(chunk_folder + '/true_positive_index.txt', con_img_list[3]+(start_img_idx-1),fmt='%i')
@@ -648,6 +649,6 @@ else:
                     f.write(str("\n\n"))
                     f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {round(len(poor_qual_set2)/(img_num-1)*100,2)} %\n')
                     f.write(f'poor_qual_set2:\n{poor_qual_set2}')
-                
+            
     
             
