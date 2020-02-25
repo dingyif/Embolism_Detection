@@ -22,7 +22,7 @@ start_time = datetime.datetime.now()
 '''
 user-specified arguments
 '''
-folder_idx_arg = 2
+folder_idx_arg = 5
 #disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 disk_path = 'E:/Diane/Col/research/code/'
 has_processed = True#Working on Processed data or Unprocessed data
@@ -92,6 +92,12 @@ else:
     #get which folder its processing now
     img_folder_name = os.path.split(img_folder)[1]
     print(f'Image Folder Name: {img_folder_name}')
+    
+    is_flip=False
+    
+    if "inglau2_stem" in img_folder_name.lower():#is_stem==True and img_nrow < img_ncol: (can't use this for T1,T2_stem)
+        print("[CAUTION] flipped img!")
+        is_flip=True
 
 
     if "stem" in img_folder.lower():
@@ -131,8 +137,6 @@ else:
                 img_ncol = img_array.shape[1]
                 img_stack = np.ndarray((img_num,img_nrow,img_ncol), dtype=np.float32)
                 print("img size:",img_nrow," x ", img_ncol)
-                if is_stem==True and img_nrow < img_ncol:
-                    print("[CAUTION] img might be flipped!")
             
             if img_array.shape[0]==img_nrow and img_array.shape[1]==img_ncol:
                 img_stack[img_re_idx] = img_array
@@ -256,8 +260,12 @@ else:
         #is_stem_mat2 = np.ones(bin_stack.shape)
         area_th = 1
         area_th2 = 3#10
-        c1_sz = max(round(25/646*max(img_ncol,img_nrow)),1)#in case img is flipped: in2_stem
-        d1_sz = max(round(10/646*max(img_ncol,img_nrow)),1)
+        if is_flip==True:#in case img is flipped: in2_stem
+            c1_sz = max(round(25/646*img_ncol),1)
+            d1_sz = max(round(10/646*img_ncol),1)
+        else:#normal direction
+            c1_sz = max(round(25/646*img_nrow),1)
+            d1_sz = max(round(10/646*img_nrow),1)
         final_area_th = 78
         max_emb_prop = 0.3#(has to be > 0.05 for a2_stem img_idx=224; has to > 0.19 for c4_stem img_idx=39; has to <0.29 for a4_stem img_idx=5; but has to be <0.19 for a4_stem img_idx=1
         #TODO: don't use max_emb_prop, but use img_sum?
@@ -344,10 +352,11 @@ else:
         '''
         poor_qual_set2 =[]
         
-        if img_nrow > img_ncol:#normal direction
-            middle_row = np.where(is_stem_mat2[0,round(img_nrow/2),:])[0]#take the middle row(in case top/bottom of stem isn't correctly detected cuz of bark)
-        else:#flip for the special horizontal img:
+        
+        if is_flip==True:#flip for the special horizontal img:
             middle_row = np.where(is_stem_mat2[0,:,round(img_ncol/2)])[0]#take the middle row(in case top/bottom of stem isn't correctly detected cuz of bark)
+        else:#normal direction
+            middle_row = np.where(is_stem_mat2[0,round(img_nrow/2),:])[0]#take the middle row(in case top/bottom of stem isn't correctly detected cuz of bark)
         stem_est_width1 = middle_row[-1]-middle_row[0]+1#an estimate of stem_width based on the middle row of is_stem_mat2 1st img
         stem_est_area1 = np.sum(is_stem_mat2[0,:,:])#stem area of 1st img
         
