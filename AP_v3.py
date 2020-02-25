@@ -563,6 +563,9 @@ else:
             
             for i in con_img_list[3]:
                 plt.imsave(chunk_folder + "/true_positive/"+str(i+(start_img_idx-1))+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
+            np.savetxt(chunk_folder + '/false_positive_index.txt', con_img_list[1]+(start_img_idx-1),fmt='%i')#integer format
+            np.savetxt(chunk_folder + '/false_negative_index.txt', con_img_list[2]+(start_img_idx-1),fmt='%i')
+            np.savetxt(chunk_folder + '/true_positive_index.txt', con_img_list[3]+(start_img_idx-1),fmt='%i')
             #but there could still be cases where there are false positive pixels in true positive img
         con_df_px = confusion_mat_pixel(final_stack,true_mask)
         #print(con_df_px)
