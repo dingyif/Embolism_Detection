@@ -22,12 +22,12 @@ start_time = datetime.datetime.now()
 '''
 user-specified arguments
 '''
-folder_idx_arg = 66
+folder_idx_arg = 2
 #disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 disk_path = 'E:/Diane/Col/research/code/'
-has_processed = False#Working on Processed data or Unprocessed data
+has_processed = True#Working on Processed data or Unprocessed data
 chunk_idx = 0#starts from 0
-chunk_size = 10#the number of imgs to process at a time
+chunk_size = 50#the number of imgs to process at a time
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
 
@@ -555,6 +555,11 @@ else:
             
             for i in con_img_list[3]:
                 plt.imsave(chunk_folder + "/true_positive/"+str(i+(start_img_idx-1))+'.jpg',final_combined_inv_info[i,:,:],cmap='gray')
+#            with open (chunk_folder + '/false_positive_index.txt',"w") as f:
+#                f.write(str(con_img_list[1]+(start_img_idx-1)))
+            np.savetxt(chunk_folder + '/false_positive_index.txt', con_img_list[1]+(start_img_idx-1),fmt='%i')#integer format
+            np.savetxt(chunk_folder + '/false_negative_index.txt', con_img_list[2]+(start_img_idx-1),fmt='%i')
+            np.savetxt(chunk_folder + '/true_positive_index.txt', con_img_list[3]+(start_img_idx-1),fmt='%i')
             #but there could still be cases where there are false positive pixels in true positive img
         con_df_px = confusion_mat_pixel(final_stack,true_mask)
         #print(con_df_px)
