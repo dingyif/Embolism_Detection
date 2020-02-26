@@ -94,7 +94,7 @@ else:
     if match==True:
         print("has tiff")    
         #real_start_img_idx = int(cand_match.group('start_img_idx'))
-        #real_end_img_idx = int(cand_match.group('end_img_idx')) + 1
+        real_end_img_idx = int(cand_match.group('end_img_idx')) + 1
     
     #get which folder its processing now
     img_folder_name = os.path.split(img_folder)[1]
@@ -115,8 +115,12 @@ else:
         sys.exit("Error: image folder name doesn't contain strings like stem or leaf")
     
     start_img_idx = 1+chunk_idx*(chunk_size-1)#real_start_img_idx+chunk_idx*(chunk_size-1)
-    end_img_idx = min(start_img_idx+chunk_size-1,len(img_paths))
- 
+    if match==True:
+        end_img_idx = min(min(start_img_idx+chunk_size-1,len(img_paths)),real_end_img_idx)
+        #real_end_img_idx for in3_stem, or else run into OSError("image file is truncated") because last 2 imgs are truncated & corrupted
+    else:
+        end_img_idx = min(start_img_idx+chunk_size-1,len(img_paths))
+    
     if is_save==True:
         #create a "folder" for saving resulting tif files such that next time when re-run this program,
         #the resulting tif file won't be viewed as the most recent modified tiff file
