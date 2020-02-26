@@ -32,7 +32,7 @@ user-specified arguments
 #folder_idx_arg = 66
 disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 #disk_path = 'E:/Diane/Col/research/code/'
-has_processed = False#Working on Processed data or Unprocessed data
+has_processed = True#Working on Processed data or Unprocessed data
 chunk_idx = 0#starts from 0
 chunk_size = 4000#the number of imgs to process at a time
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
@@ -136,6 +136,8 @@ else:
     for filename in img_paths[start_img_idx-1:]: #original img: 958 rowsx646 cols
         #can't just use end_img_idx for img_paths cuz of th.jpg
         if img_re_idx < chunk_size:
+            if img_re_idx%100==0:
+                print("img_re_idx:",img_re_idx)
             img=Image.open(filename).convert('L') #.convert('L'): gray-scale # 646x958
             img_array=np.float32(img) #convert from Image object to numpy array (black 0-255 white); 958x646
             #put in the correct data structure
