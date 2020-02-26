@@ -139,8 +139,8 @@ else:
     img_re_idx = 0 #relative index for images in start_img_idx to end_img_idx
     for filename in img_paths[start_img_idx-1:]: #original img: 958 rowsx646 cols
         #can't just use end_img_idx for img_paths cuz of th.jpg
-        if img_re_idx < chunk_size:
-            if img_re_idx%100==0:
+        if img_re_idx < chunk_size and img_re_idx < end_img_idx:
+            if img_re_idx%100==0 or img_re_idx>1120:
                 print("img_re_idx:",img_re_idx)
             img=Image.open(filename).convert('L') #.convert('L'): gray-scale # 646x958
             img_array=np.float32(img) #convert from Image object to numpy array (black 0-255 white); 958x646
