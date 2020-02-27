@@ -94,7 +94,7 @@ else:
     if match==True:
         print("has tiff")    
         #real_start_img_idx = int(cand_match.group('start_img_idx'))
-        real_end_img_idx = int(cand_match.group('end_img_idx')) + 1
+        real_end_img_idx = int(cand_match.group('end_img_idx'))# + 1
     
     #get which folder its processing now
     img_folder_name = os.path.split(img_folder)[1]
