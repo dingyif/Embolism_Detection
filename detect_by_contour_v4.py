@@ -89,7 +89,7 @@ def to_binary(img_stack):
 #    mask only the stem part to reduce false positive
 #############################################################################
 
-def extract_foreground(img_2d,chunk_folder, blur_radius=10.0,fg_threshold=0.1,expand_radius_ratio=5,is_save=False):
+def extract_foreground(img_2d, chunk_folder, blur_radius=10.0,fg_threshold=0.1,expand_radius_ratio=5,is_save=False):
     '''
     smooth img_2d by gaussian filter w/blur radius
     background when smoothed img > fg_threhold
@@ -145,7 +145,7 @@ def extract_foreground(img_2d,chunk_folder, blur_radius=10.0,fg_threshold=0.1,ex
         plt.imsave(chunk_folder + "/m3_is_stem.jpg",is_stem,cmap='gray')
     return(is_stem)#logical 2D array
 
-def extract_foregroundRGB(img_2d,chunk_folder, blur_radius=10.0,expand_radius_ratio=3,is_save=False):
+def extract_foregroundRGB(img_2d,img_re_idx,chunk_folder, blur_radius=10.0,expand_radius_ratio=3,is_save=False):
     '''
     assume stem is more green than backgorund
     '''
@@ -153,28 +153,38 @@ def extract_foregroundRGB(img_2d,chunk_folder, blur_radius=10.0,expand_radius_ra
     #smoothing (gaussian filter)
     smooth_img = ndimage.gaussian_filter(img_2d, blur_radius)
     
-    is_stem_mat = (smooth_img > np.mean(img_2d))*1 
+    is_stem_mat = (smooth_img > np.mean(img_2d))*1 #why not change it to np.mean(smooth_img), cuz np.mean(img_2d) seems slightly bigger than that of smooth_img?
     
     #plot_gray_img(is_stem_mat)#1(white) for stem part
     if is_save==True:
-        plt.imsave(chunk_folder + "/m2_1_is_stem_mat_before_max_area.jpg",is_stem_mat,cmap='gray')
+        plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_G_2_1_is_stem_mat_before_max_area.jpg",is_stem_mat,cmap='gray')
     
-    num_cc_stem, mat_cc_stem = cv2.connectedComponents(is_stem_mat.astype(np.uint8))
-    unique_cc_stem_label = np.unique(mat_cc_stem) 
-    #list of areas
-    area = []
-    if unique_cc_stem_label.size > 1: #more than 1 area 
-        for cc_label_stem in unique_cc_stem_label[1:]:
-            area.append(np.sum(mat_cc_stem == cc_label_stem))
-    #real stem part
-    if area:
-        max_area = max(area)
-        for cc_label_stem in unique_cc_stem_label[1:]:
-            if np.sum(mat_cc_stem == cc_label_stem) < max_area:
-                mat_cc_stem[mat_cc_stem == cc_label_stem] = 0
-        is_stem_mat = is_stem_mat * mat_cc_stem
+    
+    num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(is_stem_mat.astype(np.uint8), 8)#8-connectivity
+    
+    if num_cc>1:#more than 1 area, don't count bgd
+        area = stats[1:, cv2.CC_STAT_AREA]
+        max_cc_label = np.where(area==max(area))[0]+1#+1 cuz we exclude 0 in previous line
+        is_stem_mat = (mat_cc==max_cc_label)*1
     else:#no part is being selected as stem --> treat entire img as stem
         is_stem_mat = is_stem_mat+1
+        
+#    num_cc_stem, mat_cc_stem = cv2.connectedComponents(is_stem_mat.astype(np.uint8))
+#    unique_cc_stem_label = np.unique(mat_cc_stem) 
+#    #list of areas
+#    area = []
+#    if unique_cc_stem_label.size > 1: #more than 1 area 
+#        for cc_label_stem in unique_cc_stem_label[1:]:
+#            area.append(np.sum(mat_cc_stem == cc_label_stem))
+#    #real stem part
+#    if area:
+#        max_area = max(area)
+#        for cc_label_stem in unique_cc_stem_label[1:]:
+#            if np.sum(mat_cc_stem == cc_label_stem) < max_area:
+#                mat_cc_stem[mat_cc_stem == cc_label_stem] = 0
+#        is_stem_mat = is_stem_mat * mat_cc_stem
+#    else:#no part is being selected as stem --> treat entire img as stem
+#        is_stem_mat = is_stem_mat+1
     
     #expand the stem part a bit by shrinking the not_stem
     not_stem = -is_stem_mat+1
@@ -185,13 +195,55 @@ def extract_foregroundRGB(img_2d,chunk_folder, blur_radius=10.0,expand_radius_ra
     
     #plot_gray_img(is_stem+not_stem)#expansion
     if is_save==True:
-        plt.imsave(chunk_folder+"/m2_expansion_foreground.jpg",is_stem_mat+not_stem,cmap='gray')
+        plt.imsave(chunk_folder+"/s_"+str(img_re_idx)+"_G_2_expansion_foreground.jpg",is_stem_mat+not_stem,cmap='gray')
     #plot_gray_img(is_stem)#1(white) for stem part
     if is_save==True:
         plot_gray_img(is_stem_mat)#1(white) for stem part
-        plt.imsave(chunk_folder + "/m3_is_stem_mat.jpg",is_stem_mat,cmap='gray')
+        plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_G_3_is_stem_matG.jpg",is_stem_mat,cmap='gray')
     return(is_stem_mat)#logical 2D array
 
+def foreground_B(img_2d,img_re_idx,chunk_folder,quan_th=0.9, G_max = 160,blur_radius=10.0,expand_radius_ratio=9,is_save=False):
+    '''
+    assume stem is more blue than bark (i.e. stem is whiter than bark)
+    G_max is introduced because of in3_stem
+    '''
+    
+    #smoothing (gaussian filter)
+    smooth_img = ndimage.gaussian_filter(img_2d, blur_radius)
+    
+    is_stem_mat = (smooth_img > min(np.quantile(smooth_img,quan_th),G_max))*1
+    
+    #plot_gray_img(is_stem_mat)#1(white) for stem part
+    if is_save==True:
+        plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_B_2_1_is_stem_mat_before_max_area.jpg",is_stem_mat,cmap='gray')
+    
+    
+    num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(is_stem_mat.astype(np.uint8), 8)#8-connectivity
+    
+    if num_cc>1:#more than 1 area, don't count bgd
+        area = stats[1:, cv2.CC_STAT_AREA]
+        max_cc_label = np.where(area==max(area))[0]+1#+1 cuz we exclude 0 in previous line
+        is_stem_mat = (mat_cc==max_cc_label)*1
+    else:#no part is being selected as stem --> treat entire img as stem
+        is_stem_mat = is_stem_mat+1
+        
+
+    
+    #expand the stem part a bit by shrinking the not_stem
+    not_stem = -is_stem_mat+1
+    unif_radius = blur_radius*expand_radius_ratio
+    not_stem_exp =  to_binary(ndimage.uniform_filter(not_stem, size=unif_radius))
+    
+    is_stem_mat = (not_stem_exp==0)#invert
+    
+    #plot_gray_img(is_stem+not_stem)#expansion
+    if is_save==True:
+        plt.imsave(chunk_folder+"/s_"+str(img_re_idx)+"_B_2_foreground_B.jpg",is_stem_mat+not_stem,cmap='gray')
+    #plot_gray_img(is_stem)#1(white) for stem part
+    if is_save==True:
+        plot_gray_img(is_stem_mat)#1(white) for stem part
+        plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_B_3_is_stem_matB.jpg",is_stem_mat,cmap='gray')
+    return(is_stem_mat)#logical 2D array
 #############################################################################
 #    main function for detecting embolism
 ############################################################################# 

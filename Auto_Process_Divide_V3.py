@@ -9,7 +9,7 @@ import os,shutil#for creating/emptying folders
 import re
 import sys
 from detect_by_contour_v4 import plot_gray_img, to_binary,plot_img_sum, plot_overlap_sum
-from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB
+from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB,foreground_B
 from detect_by_contour_v4 import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set
 from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
 from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric,print_used_time
@@ -27,7 +27,7 @@ folder_idx_arg = 5
 disk_path = 'E:/Diane/Col/research/code/'
 has_processed = True#Working on Processed data or Unprocessed data
 chunk_idx = 0#starts from 0
-chunk_size = 900#the number of imgs to process at a time
+chunk_size = 300#the number of imgs to process at a time
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
 plot_interm = False
@@ -44,7 +44,7 @@ else:
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 
-#for img_folder in all_folders_dir[2:6]:
+#for img_folder in all_folders_dir[1:7]:
 img_folder = all_folders_dir[folder_idx_arg]
 
 #Need to process c folder
@@ -87,7 +87,7 @@ else:
     if match==True:
         print("has tiff")    
         #real_start_img_idx = int(cand_match.group('start_img_idx'))
-        #real_end_img_idx = int(cand_match.group('end_img_idx')) + 1
+        real_end_img_idx = int(cand_match.group('end_img_idx'))# + 1
     
     #get which folder its processing now
     img_folder_name = os.path.split(img_folder)[1]
@@ -108,12 +108,16 @@ else:
         sys.exit("Error: image folder name doesn't contain strings like stem or leaf")
     
     start_img_idx = 1+chunk_idx*(chunk_size-1)#real_start_img_idx+chunk_idx*(chunk_size-1)
-    end_img_idx = min(start_img_idx+chunk_size-1,len(img_paths))
+    if match==True:
+        end_img_idx = min(min(start_img_idx+chunk_size-1,len(img_paths)),real_end_img_idx)
+        #real_end_img_idx for in3_stem, or else run into OSError("image file is truncated") because last 2 imgs are truncated & corrupted
+    else:
+        end_img_idx = min(start_img_idx+chunk_size-1,len(img_paths))
  
     if is_save==True:
         #create a "folder" for saving resulting tif files such that next time when re-run this program,
         #the resulting tif file won't be viewed as the most recent modified tiff file
-        chunk_folder = os.path.join(img_folder,img_folder_name,'v9.5_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
+        chunk_folder = os.path.join(img_folder,img_folder_name,'v9.7_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
         if not os.path.exists(chunk_folder):#create new folder if not existed
             os.makedirs(chunk_folder)
         else:#empty the existing folder
@@ -128,7 +132,9 @@ else:
     img_re_idx = 0 #relative index for images in start_img_idx to end_img_idx
     for filename in img_paths[start_img_idx-1:]: #original img: 958 rowsx646 cols
         #can't just use end_img_idx for img_paths cuz of th.jpg
-        if img_re_idx < chunk_size:
+        if img_re_idx < chunk_size and img_re_idx < end_img_idx:#real_end_img_idx for in3_stem, or else run into OSError("image file is truncated")
+            if img_re_idx%100==0:#for debugging on server
+                print("img_re_idx:",img_re_idx)
             img=Image.open(filename).convert('L') #.convert('L'): gray-scale # 646x958
             img_array=np.float32(img) #convert from Image object to numpy array (black 0-255 white); 958x646
             #put in the correct data structure
@@ -211,17 +217,40 @@ else:
 #        is_stem_mat2 = bigger_than_mean[:-1,:,:]*(is_stem_mat*1)
 #        #drop the last img s.t. size would be the same as diff_stack
 #        #multiply by is_stem_mat to crudely remove the noises (false positive) outside of is_stem_mat2
-        is_stem_mat = np.ones(img_stack.shape)
+        is_stem_matG = np.ones(img_stack.shape)
         img_re_idx = 0
         for filename in img_paths[(start_img_idx-1):end_img_idx]: #original img: 958 rowsx646 cols
             imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
             imgGarray=imgRGB_arr[:,:,1] #only look at G layer
             #put in the correct data structure
             if img_re_idx==0 and is_save==True:
-                is_stem_mat[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True)
+                is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True)
             else:
-                is_stem_mat[img_re_idx] = extract_foregroundRGB(imgGarray,chunk_folder, blur_radius=10.0,expand_radius_ratio=2)
+                is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2)
             img_re_idx = img_re_idx + 1
+        '''
+        v9.7: to separate bark and stem (both very green --> is_stem_mat)
+        assume stem is whiter(larger B value)
+        '''
+        is_stem_matB = np.ones(img_stack.shape)
+        img_re_idx = 0
+        for filename in img_paths[(start_img_idx-1):end_img_idx]: #??? would end_img_idx cause issue?
+            imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
+            imgBarray=imgRGB_arr[:,:,2] #only look at B layer
+            #put in the correct data structure
+            if img_re_idx==0 and is_save==True:
+                #quan_th=0.9 --> too strong for cas2.2_Stem --> is_stem_matB_before_max_area becomes not connected
+                #quan_th: 0.9 --> 0.8 and expand_radius_ratio=9 --> 8
+                is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_re_idx, chunk_folder,quan_th=0.8,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
+            else:
+                is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_re_idx, chunk_folder,quan_th=0.8,G_max = 160, blur_radius=10.0,expand_radius_ratio=9)
+            img_re_idx = img_re_idx + 1
+        is_stem_mat = is_stem_matG*is_stem_matB
+        
+        #is_stem_mat=is_stem_matG (w/o v9.7)
+        if is_save==True:
+            plt.imsave(chunk_folder + "/m_3_is_stem_mat0.jpg",is_stem_mat[0,:,:],cmap='gray')
+            plt.imsave(chunk_folder + "/m_3_is_stem_mat3.jpg",is_stem_mat[3,:,:],cmap='gray')
         is_stem_mat2 = is_stem_mat[:-1,:,:]#drop the last img s.t. size would be the same as diff_stack
         print("finish is_stem_mat2")
         
@@ -398,13 +427,13 @@ else:
 #                for cc_idx in range(1,num_cc):#1: ignore bgd(0)
 
 #        '''
-#        remove imgs with bubble
+#        remove imgs with bubble before rolling window
 #        '''
 #        no_bubble_stack = 1-bubble_stack
 #        final_stack=final_stack1*no_bubble_stack
         
         '''
-        Don't count as embolism if it keeps appearing (probably is plastic cover)
+        Don't count as embolism if it keeps appearing (probably is plastic cover) (rolling window)
         '''
         final_stack= np.zeros(bin_stack.shape)
         window_idx_max = math.ceil(bin_stack.shape[0]/window_size)
@@ -438,6 +467,11 @@ else:
         emb_cand_stack = np.repeat(emb_cand_each_img1[:,:,np.newaxis],final_stack.shape[2],2)
         final_stack = emb_cand_stack*final_stack
         
+#            '''
+#            remove imgs with bubble after rolling window (v9.6)
+#            '''
+#            no_bubble_stack = 1-bubble_stack
+#            final_stack=final_stack*no_bubble_stack
         
     else:    
         final_stack = np.copy(final_stack1)
