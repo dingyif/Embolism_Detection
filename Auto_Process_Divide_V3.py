@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from scipy import ndimage
 from PIL import Image
 import glob
 import matplotlib.pyplot as plt
@@ -483,57 +482,18 @@ else:
             remove short/too small/too big/too wide cc
             remove cc wide but not tall
             '''
-#            has_embolism1 = img_contain_emb(final_stack)
-#            blur_radius = 3
-#            cc_height_min = 70
-#            cc_area_min = 1000
-#            cc_area_max = 75000
-#            cc_width_min = 25	
-#            cc_width_max = 200#100#v9.82(100-->150):#v9.83(150-->200) c5_stem img_idx=28: cc_width=157
-#            
-#            final_stack_prev_stage = np.copy(final_stack)
-#            input_stack = filter_stack*final_stack_prev_stage
-#            final_stack,invalid_emb_set,cleaned_but_not_all_invalid_set = remove_cc_by_geo(input_stack,final_stack_prev_stage,has_embolism1,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max)
+            has_embolism1 = img_contain_emb(final_stack)
+            blur_radius = 3
+            cc_height_min = 70
+            cc_area_min = 1000
+            cc_area_max = 75000
+            cc_width_min = 25	
+            cc_width_max = 200#100#v9.82(100-->150):#v9.83(150-->200) c5_stem img_idx=28: cc_width=157#basically useless
             
-                invalid_emb_set = []#entire img being cleaned to 0
-                cleaned_but_not_all_invalid_set=[]#some cc in the img being cleaned to 0
-                has_embolism1 = img_contain_emb(final_stack)
-                blur_radius = 3
-                cc_height_min = 70
-                cc_area_min = 1000
-                cc_area_max = 75000
-                cc_width_min = 25	
-                cc_width_max = 200#100#v9.82(100-->150):#v9.83(150-->200) c5_stem img_idx=28: cc_width=157
-                
-                final_stack_prev_stage = np.copy(final_stack)
-                if version_num==9.81:
-                    input_stack = final_stack_prev_stage
-                else:#v9.82
-                    input_stack = filter_stack*final_stack_prev_stage
-                for img_idx in np.where(has_embolism1)[0]:
-                    img = input_stack[img_idx,:,:]
-                    #clustering process
-                    smooth_img = ndimage.gaussian_filter(img, sigma = blur_radius)
-                    
-                    num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(smooth_img.astype(np.uint8), 8)#8-connectivity
-                    
-                    cc_width = stats[1:,cv2.CC_STAT_WIDTH]#"1:", ignore bgd:0
-                    cc_height = stats[1:,cv2.CC_STAT_HEIGHT]
-                    cc_area = stats[1:, cv2.CC_STAT_AREA]
-                    
-                    cc_valid_labels = np.where((cc_height > cc_height_min)*(cc_area > cc_area_min)*(cc_area < cc_area_max)*(cc_width > cc_width_min)*(cc_width < cc_width_max)*(cc_width < cc_height))[0]
-                    
-                    mat_cc_valid = img*0
-                    if cc_valid_labels.size > 0:#not all invalid
-                        for cc_idx in (cc_valid_labels+1):#+1 cuz ignore bgd before
-                            mat_cc_valid += 1*(mat_cc==cc_idx)
-                        if cc_valid_labels.size < num_cc-1:#-1 cuz of bgd
-                            cleaned_but_not_all_invalid_set.append(img_idx)
-                        if version_num > 9.81:#v9.82
-                            mat_cc_valid = cv2.dilate(mat_cc_valid.astype(np.uint8), np.ones((2,2),np.uint8),iterations = 1)
-                    else:
-                        invalid_emb_set.append(img_idx)
-                    final_stack[img_idx,:,:]= mat_cc_valid*final_stack_prev_stage[img_idx,:,:]#or *(img>0)*255
+            final_stack_prev_stage = np.copy(final_stack)
+            input_stack = filter_stack*final_stack_prev_stage
+            final_stack,invalid_emb_set,cleaned_but_not_all_invalid_set = remove_cc_by_geo(input_stack,final_stack_prev_stage,has_embolism1,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max)
+
     else:    
         final_stack = np.copy(final_stack1)
         '''
