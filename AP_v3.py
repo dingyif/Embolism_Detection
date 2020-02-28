@@ -32,13 +32,17 @@ user-specified arguments
 #folder_idx_arg = 66
 disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 #disk_path = 'E:/Diane/Col/research/code/'
-has_processed = False#Working on Processed data or Unprocessed data
-chunk_idx = 0#starts from 0
-chunk_size = 4000#the number of imgs to process at a time
+if sys.argv[1]==1:
+    has_processed = False#Working on Processed data or Unprocessed data
+else:
+    has_processed = True
+
+chunk_idx = sys.argv[2]#starts from 0
+chunk_size = sys.argv[3]#4000#the number of imgs to process at a time
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
 plot_interm = False
-version_num = 9.7
+version_num = sys.argv[4]#9.7
 
 folder_list = []
 has_tif = []
