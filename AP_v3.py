@@ -23,26 +23,29 @@ for server
 '''
 import argparse
 parser = argparse.ArgumentParser()
-parser.add_argument('--shard', type=int)
+parser.add_argument('--folder_idx', type=int)
+parser.add_argument('--has_proc', type=int)
+parser.add_argument('--chunk_idx', type=int)
+parser.add_argument('--chunk_size', type=int)
+parser.add_argument('--version', type=float)
 args = parser.parse_args()
-folder_idx_arg = args.shard#folder index from args
 '''
-user-specified arguments
+user-specified arguments (from server input)
 '''
-#folder_idx_arg = 66
+folder_idx_arg = args.foler_idx
 disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 #disk_path = 'E:/Diane/Col/research/code/'
-if sys.argv[1]==1:
+if args.has_proc==1:
     has_processed = False#Working on Processed data or Unprocessed data
 else:
     has_processed = True
 
-chunk_idx = sys.argv[2]#starts from 0
-chunk_size = sys.argv[3]#4000#the number of imgs to process at a time
+chunk_idx = args.chunk_idx#starts from 0
+chunk_size = args.chunk_size#4000#the number of imgs to process at a time
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
 plot_interm = False
-version_num = sys.argv[4]#9.7
+version_num = args.version#9.7
 
 folder_list = []
 has_tif = []
