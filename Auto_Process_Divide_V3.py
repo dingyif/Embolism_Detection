@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from scipy import ndimage
 from PIL import Image
 import glob
 import matplotlib.pyplot as plt
@@ -10,7 +11,7 @@ import re
 import sys
 from detect_by_contour_v4 import plot_gray_img, to_binary,plot_img_sum, plot_overlap_sum
 from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB,foreground_B
-from detect_by_contour_v4 import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set
+from detect_by_contour_v4 import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set, remove_cc_by_geo
 from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
 from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric,print_used_time
 from density import density_of_a_rect
@@ -31,7 +32,7 @@ chunk_size = 400#the number of imgs to process at a time #try to be a multiple o
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
 plot_interm = False
-version_num = 9.7
+version_num = 9.83
 
 folder_list = []
 has_tif = []
@@ -45,7 +46,7 @@ else:
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 
-#for img_folder in all_folders_dir[1:7]:
+#for img_folder in all_folders_dir[1:2]:
 img_folder = all_folders_dir[folder_idx_arg]
 
 #Need to process c folder
@@ -239,7 +240,7 @@ else:
             #quan_th: 0.9 --> 0.8 and expand_radius_ratio=9 --> 8
             is_stem_matB = np.ones(img_stack.shape)
             img_re_idx = 0
-            for filename in img_paths[(start_img_idx-1):end_img_idx]: #??? would end_img_idx cause issue?
+            for filename in img_paths[(start_img_idx-1):end_img_idx]: 
                 imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
                 imgBarray=imgRGB_arr[:,:,2] #only look at B layer
                 #put in the correct data structure
@@ -381,58 +382,54 @@ else:
     if is_stem==True:
         
         final_stack21 = np.copy(final_stack1)
-        
-        '''
-        if there's at least one cc too wide, big area, and dense in bounding box --> flag as poor quality (poor_qual_set2)
-        and treat as if no emb
-        TODO: maybe try using density seg. as in leafs?
-        '''
-        poor_qual_set2 =[]
-        
-        
-        if is_flip==True:#flip for the special horizontal img:
-            middle_row = np.where(is_stem_mat2[0,:,round(img_ncol/2)])[0]#take the middle row(in case top/bottom of stem isn't correctly detected cuz of bark)
-        else:#normal direction
-            middle_row = np.where(is_stem_mat2[0,round(img_nrow/2),:])[0]#take the middle row(in case top/bottom of stem isn't correctly detected cuz of bark)
-        stem_est_width1 = middle_row[-1]-middle_row[0]+1#an estimate of stem_width based on the middle row of is_stem_mat2 1st img
-        stem_est_area1 = np.sum(is_stem_mat2[0,:,:])#stem area of 1st img
-        
-        for img_idx in range(0, final_stack21.shape[0]):
-            current_img = final_stack1[img_idx,:,:]
-            if np.sum(current_img)>0:
-        #        img_ero = cv2.erode(current_img.astype(np.uint8), np.ones((second_ero_kernel_sz,second_ero_kernel_sz),np.uint8),iterations = 1)#erose to seperate embolism from noises
-        #        if plot_interm == True:
-        #            plot_gray_img(img_ero,str(img_idx)+"_img_ero")
-                #density_img_exp = cv2.closing(density_img_ero.astype(np.uint8), ,np.uint8),iterations = 1)#expand to connect
-                img_clo = cv2.morphologyEx(current_img.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((second_clo_kernel_sz,second_clo_kernel_sz),np.uint8))
-                if plot_interm == True:
-                    plot_gray_img(img_clo,str(img_idx)+"_img_clo")
-                num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(img_clo.astype(np.uint8), 8)#8-connectivity
-                
-                
-                #TODO: not sure if this is the correct direction for the special horiz. imgs
-                #first two arg: total number of cc, mat with same input size that labels each cc
-                cc_width = stats[1:,cv2.CC_STAT_WIDTH]#"1:", ignore bgd:0
-                cc_height = stats[1:,cv2.CC_STAT_HEIGHT]
-                cc_area = stats[1:, cv2.CC_STAT_AREA]
-                #largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
-                
-                cc_area_too_big = cc_area/stem_est_area1 > second_area_max
-                cc_too_wide = cc_width/stem_est_width1 > second_width_max
-                cc_high_dens_in_rect = cc_area/(cc_width*cc_height) > second_rect_dens_max
-                #cas2.2 img_idx=193 (true emb) the top bark is wide (0.93) and high dens, so need area
-                #cas2.2 img_idx=6 (false pos) is wide prop (>1) and big area prop (0.239) and high dens (0.425)
-                #cas2.2 img_idx=213 (true emb) is wide prop (>1) and big area proportion (0.22) but density of cc in bounding box is small (0.26)
-                if np.any(cc_too_wide*cc_high_dens_in_rect*cc_area_too_big):
-                    poor_qual_set2.append(img_idx)
-                    final_stack21[img_idx,:,:]=mat_cc*0
-                    if plot_interm==True:
-                        print(img_idx," in poor_qual_set2")
-                #TODO: discard cc wide but not tall (probably bark)
-#                else:
-#                    
-#                cc_area_too_small = cc_area
-#                for cc_idx in range(1,num_cc):#1: ignore bgd(0)
+        if version_num >= 9.2:
+            '''
+            if there's at least one cc too wide, big area, and dense in bounding box --> flag as poor quality (poor_qual_set2)
+            and treat as if no emb
+            TODO: maybe try using density seg. as in leafs?
+            '''
+            poor_qual_set2 =[]
+            
+            
+            if is_flip==True:#flip for the special horizontal img:
+                middle_row = np.where(is_stem_mat2[0,:,round(img_ncol/2)])[0]#take the middle row(in case top/bottom of stem isn't correctly detected cuz of bark)
+            else:#normal direction
+                middle_row = np.where(is_stem_mat2[0,round(img_nrow/2),:])[0]#take the middle row(in case top/bottom of stem isn't correctly detected cuz of bark)
+            stem_est_width1 = middle_row[-1]-middle_row[0]+1#an estimate of stem_width based on the middle row of is_stem_mat2 1st img
+            stem_est_area1 = np.sum(is_stem_mat2[0,:,:])#stem area of 1st img
+            
+            for img_idx in range(0, final_stack21.shape[0]):
+                current_img = final_stack1[img_idx,:,:]
+                if np.sum(current_img)>0:
+            #        img_ero = cv2.erode(current_img.astype(np.uint8), np.ones((second_ero_kernel_sz,second_ero_kernel_sz),np.uint8),iterations = 1)#erose to seperate embolism from noises
+            #        if plot_interm == True:
+            #            plot_gray_img(img_ero,str(img_idx)+"_img_ero")
+                    #density_img_exp = cv2.closing(density_img_ero.astype(np.uint8), ,np.uint8),iterations = 1)#expand to connect
+                    img_clo = cv2.morphologyEx(current_img.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((second_clo_kernel_sz,second_clo_kernel_sz),np.uint8))
+                    if plot_interm == True:
+                        plot_gray_img(img_clo,str(img_idx)+"_img_clo")
+                    num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(img_clo.astype(np.uint8), 8)#8-connectivity
+                    
+                    
+                    #TODO: not sure if this is the correct direction for the special horiz. imgs
+                    #first two arg: total number of cc, mat with same input size that labels each cc
+                    cc_width = stats[1:,cv2.CC_STAT_WIDTH]#"1:", ignore bgd:0
+                    cc_height = stats[1:,cv2.CC_STAT_HEIGHT]
+                    cc_area = stats[1:, cv2.CC_STAT_AREA]
+                    #largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
+                    
+                    cc_area_too_big = cc_area/stem_est_area1 > second_area_max
+                    cc_too_wide = cc_width/stem_est_width1 > second_width_max
+                    cc_high_dens_in_rect = cc_area/(cc_width*cc_height) > second_rect_dens_max
+                    #cas2.2 img_idx=193 (true emb) the top bark is wide (0.93) and high dens, so need area
+                    #cas2.2 img_idx=6 (false pos) is wide prop (>1) and big area prop (0.239) and high dens (0.425)
+                    #cas2.2 img_idx=213 (true emb) is wide prop (>1) and big area proportion (0.22) but density of cc in bounding box is small (0.26)
+                    if np.any(cc_too_wide*cc_high_dens_in_rect*cc_area_too_big):
+                        poor_qual_set2.append(img_idx)
+                        final_stack21[img_idx,:,:]=mat_cc*0
+                        if plot_interm==True:
+                            print(img_idx," in poor_qual_set2")
+                    
         if version_num==9.65:
             '''
             remove imgs with bubble before rolling window
@@ -481,7 +478,62 @@ else:
             '''
             no_bubble_stack = 1-bubble_stack
             final_stack=final_stack*no_bubble_stack
-        
+        if version_num >= 9.8:
+            '''
+            remove short/too small/too big/too wide cc
+            remove cc wide but not tall
+            '''
+#            has_embolism1 = img_contain_emb(final_stack)
+#            blur_radius = 3
+#            cc_height_min = 70
+#            cc_area_min = 1000
+#            cc_area_max = 75000
+#            cc_width_min = 25	
+#            cc_width_max = 200#100#v9.82(100-->150):#v9.83(150-->200) c5_stem img_idx=28: cc_width=157
+#            
+#            final_stack_prev_stage = np.copy(final_stack)
+#            input_stack = filter_stack*final_stack_prev_stage
+#            final_stack,invalid_emb_set,cleaned_but_not_all_invalid_set = remove_cc_by_geo(input_stack,final_stack_prev_stage,has_embolism1,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max)
+            
+                invalid_emb_set = []#entire img being cleaned to 0
+                cleaned_but_not_all_invalid_set=[]#some cc in the img being cleaned to 0
+                has_embolism1 = img_contain_emb(final_stack)
+                blur_radius = 3
+                cc_height_min = 70
+                cc_area_min = 1000
+                cc_area_max = 75000
+                cc_width_min = 25	
+                cc_width_max = 200#100#v9.82(100-->150):#v9.83(150-->200) c5_stem img_idx=28: cc_width=157
+                
+                final_stack_prev_stage = np.copy(final_stack)
+                if version_num==9.81:
+                    input_stack = final_stack_prev_stage
+                else:#v9.82
+                    input_stack = filter_stack*final_stack_prev_stage
+                for img_idx in np.where(has_embolism1)[0]:
+                    img = input_stack[img_idx,:,:]
+                    #clustering process
+                    smooth_img = ndimage.gaussian_filter(img, sigma = blur_radius)
+                    
+                    num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(smooth_img.astype(np.uint8), 8)#8-connectivity
+                    
+                    cc_width = stats[1:,cv2.CC_STAT_WIDTH]#"1:", ignore bgd:0
+                    cc_height = stats[1:,cv2.CC_STAT_HEIGHT]
+                    cc_area = stats[1:, cv2.CC_STAT_AREA]
+                    
+                    cc_valid_labels = np.where((cc_height > cc_height_min)*(cc_area > cc_area_min)*(cc_area < cc_area_max)*(cc_width > cc_width_min)*(cc_width < cc_width_max)*(cc_width < cc_height))[0]
+                    
+                    mat_cc_valid = img*0
+                    if cc_valid_labels.size > 0:#not all invalid
+                        for cc_idx in (cc_valid_labels+1):#+1 cuz ignore bgd before
+                            mat_cc_valid += 1*(mat_cc==cc_idx)
+                        if cc_valid_labels.size < num_cc-1:#-1 cuz of bgd
+                            cleaned_but_not_all_invalid_set.append(img_idx)
+                        if version_num > 9.81:#v9.82
+                            mat_cc_valid = cv2.dilate(mat_cc_valid.astype(np.uint8), np.ones((2,2),np.uint8),iterations = 1)
+                    else:
+                        invalid_emb_set.append(img_idx)
+                    final_stack[img_idx,:,:]= mat_cc_valid*final_stack_prev_stage[img_idx,:,:]#or *(img>0)*255
     else:    
         final_stack = np.copy(final_stack1)
         '''
@@ -672,8 +724,12 @@ else:
                         f.write(f'bubble_cc_max_area_prop of poor_qual_set_cc:\n{poor_qual_bubble_cc_max_area}\n\n')
                         f.write(f'bubble_cc_max_area_prop of true_emb:\n{true_emb_bubble_cc_max_area}')
                         f.write(str("\n\n"))
-                    f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {round(len(poor_qual_set2)/(img_num-1)*100,2)} %\n')
-                    f.write(f'poor_qual_set2:\n{poor_qual_set2}\n\n')
+                    if version_num >= 9.2:
+                        f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {round(len(poor_qual_set2)/(img_num-1)*100,2)} %\n')
+                        f.write(f'poor_qual_set2:\n{poor_qual_set2}\n\n')
+                    if version_num >= 9.8:
+                        f.write(f'invalid_emb_set:{invalid_emb_set}\n')
+                        f.write(f'cleaned_but_not_all_invalid_set:{cleaned_but_not_all_invalid_set}\n\n')
                     
     else:#match ==False, no more confusion matrix
         if is_stem==True:
@@ -701,8 +757,12 @@ else:
                     if version_num >= 9.5:
                         f.write(f'bubble_cc_max_area_prop of poor_qual_set_cc:\n{poor_qual_bubble_cc_max_area}\n\n')
                         f.write(str("\n\n"))
-                    f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {round(len(poor_qual_set2)/(img_num-1)*100,2)} %\n')
-                    f.write(f'poor_qual_set2:\n{poor_qual_set2}')
+                    if version_num >= 9.2:
+                        f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {round(len(poor_qual_set2)/(img_num-1)*100,2)} %\n')
+                        f.write(f'poor_qual_set2:\n{poor_qual_set2}')
+                    if version_num >= 9.8:
+                        f.write(f'invalid_emb_set:{invalid_emb_set}\n')
+                        f.write(f'cleaned_but_not_all_invalid_set:{cleaned_but_not_all_invalid_set}\n\n')
                 
     
             
