@@ -9,7 +9,7 @@ import os,shutil#for creating/emptying folders
 import re
 import sys
 from detect_by_contour_v4 import plot_gray_img, to_binary,plot_img_sum, plot_overlap_sum
-from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB,foreground_B
+from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB,foreground_B, remove_cc_by_geo
 from detect_by_contour_v4 import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set
 from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
 from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric,print_used_time
