@@ -32,7 +32,7 @@ args = parser.parse_args()
 '''
 user-specified arguments (from server input)
 '''
-folder_idx_arg = args.foler_idx
+folder_idx_arg = args.folder_idx
 disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 #disk_path = 'E:/Diane/Col/research/code/'
 if args.has_proc==1:
