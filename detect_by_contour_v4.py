@@ -986,7 +986,8 @@ def detect_bubble(input_stack,blur_radius=11,hough_param1=25,hough_param2=10, mi
         circles = cv2.HoughCircles(gray_img.astype(np.uint8), cv2.HOUGH_GRADIENT, dp=dp, minDist=10, param1 = hough_param1, param2 = hough_param2, minRadius = minRadius, maxRadius = maxRadius)
         #dp – Inverse ratio of the accumulator resolution to the image resolution. For example, if dp=1 , the accumulator has the same resolution as the input image. If dp=2 , the accumulator has half as big width and height.
         #param1 – First method-specific parameter. In case of CV_HOUGH_GRADIENT , it is the higher threshold of the two passed to the Canny() edge detector (the lower one is twice smaller).
-        #param2 – Second method-specific parameter. In case of CV_HOUGH_GRADIENT , it is the accumulator threshold for the circle centers at the detection stage. The smaller it is, the more false circles may be detected. Circles, corresponding to the larger accumulator values, will be returned first.
+        #param2 – Second method-specific parameter. In case of CV_HOUGH_GRADIENT , it is the accumulator threshold for the circle centers at the detection stage. 
+        #        The smaller it is, the more false circles may be detected. Circles, corresponding to the larger accumulator values, will be returned first.
         #Usually the function detects the centers of circles well. However, it may fail to find correct radii. 
         
         output_img = np.zeros(gray_img.shape)
@@ -1019,7 +1020,7 @@ def calc_bubble_area_prop(bubble_stack,is_stem_mat2,chunk_folder,is_save=False,p
     '''
     To decide bubble_area_prop_max--> considered as poor quality -->no emb:
     '''
-    #from v9.4
+    #from v9.4 hough_param2=10
     #bound for bubble_area_prop_max: foldername(chunk_size) / largest bubble_area has emb img_idx / smallest bubble_area no emb img_idx
     #>0.2,0.081, <0.31: cas5_stem(50) / 28 (not poor qual by eyes, but thought emb as bubble),1 / 8
     #>0.159, <0.268: cas2.2_stem(300) / 4(bubble_area_prop=1.025), 2nd largest bubble_area has emb img_idx =232 / 40
@@ -1028,6 +1029,10 @@ def calc_bubble_area_prop(bubble_stack,is_stem_mat2,chunk_folder,is_save=False,p
     #>0.024, <0.213,0.222,0.389: Alclat2_stem(400) / 324 / 0,1,54
     #look at max cc area of each img in bubble_stack: to separate cases for a2_stem and c5_stem: 
     #c2.2 img_idx=5,40
+    
+    #from v9.4 hough_param2=15, bubble_area_prop_max=0.1 
+    #c5 >0.014, <0.173
+    #c2.2 >0.159 (img 232), <0.268:
     num_bins=50
     fig = plt.figure()
     n_th, bins_th, patches_th= plt.hist(bubble_area_prop_vec,bins=num_bins)

@@ -38,6 +38,7 @@ chunk_size = 4000#the number of imgs to process at a time
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
 plot_interm = False
+version_num = 9.7
 
 folder_list = []
 has_tif = []
@@ -124,7 +125,7 @@ else:
     if is_save==True:
         #create a "folder" for saving resulting tif files such that next time when re-run this program,
         #the resulting tif file won't be viewed as the most recent modified tiff file
-        chunk_folder = os.path.join(img_folder,img_folder_name,'v9.7_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
+        chunk_folder = os.path.join(img_folder,img_folder_name,'v'+str(version_num)+'_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
         if not os.path.exists(chunk_folder):#create new folder if not existed
             os.makedirs(chunk_folder)
         else:#empty the existing folder
@@ -239,25 +240,27 @@ else:
         v9.7: to separate bark and stem (both very green --> is_stem_mat)
         assume stem is whiter(larger B value)
         '''
-        is_stem_matB = np.ones(img_stack.shape)
-        img_re_idx = 0
-        for filename in img_paths[(start_img_idx-1):end_img_idx]: #??? would end_img_idx cause issue?
-            imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
-            imgBarray=imgRGB_arr[:,:,2] #only look at B layer
-            #put in the correct data structure
-            if img_re_idx==0 and is_save==True:
-                #quan_th=0.9 --> too strong for cas2.2_Stem --> is_stem_matB_before_max_area becomes not connected
-                #quan_th: 0.9 --> 0.8 and expand_radius_ratio=9 --> 8
-                is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_re_idx, chunk_folder,quan_th=0.8,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
-            else:
-                is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_re_idx, chunk_folder,quan_th=0.8,G_max = 160, blur_radius=10.0,expand_radius_ratio=9)
-            img_re_idx = img_re_idx + 1
-        is_stem_mat = is_stem_matG*is_stem_matB
-        
-        #is_stem_mat=is_stem_matG (w/o v9.7)
+        if version_num >= 9.7:
+            quan_th = 0.8
+            #quan_th=0.9 --> too strong for cas2.2_Stem --> is_stem_matB_before_max_area becomes not connected
+            #quan_th: 0.9 --> 0.8 and expand_radius_ratio=9 --> 8
+            is_stem_matB = np.ones(img_stack.shape)
+            img_re_idx = 0
+            for filename in img_paths[(start_img_idx-1):end_img_idx]: #??? would end_img_idx cause issue?
+                imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
+                imgBarray=imgRGB_arr[:,:,2] #only look at B layer
+                #put in the correct data structure
+                if img_re_idx==0 and is_save==True:
+                    is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
+                else:
+                    is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9)
+                img_re_idx = img_re_idx + 1
+            is_stem_mat = is_stem_matG*is_stem_matB
+        else:
+            is_stem_mat=is_stem_matG #(w/o v9.7)
         if is_save==True:
             plt.imsave(chunk_folder + "/m_3_is_stem_mat0.jpg",is_stem_mat[0,:,:],cmap='gray')
-            plt.imsave(chunk_folder + "/m_3_is_stem_mat3.jpg",is_stem_mat[3,:,:],cmap='gray')
+            plt.imsave(chunk_folder + "/m_3_is_stem_mat9.jpg",is_stem_mat[9,:,:],cmap='gray')
         is_stem_mat2 = is_stem_mat[:-1,:,:]#drop the last img s.t. size would be the same as diff_stack
         print("finish is_stem_mat2")
         
@@ -313,13 +316,14 @@ else:
         cc_th = 3
         window_size = 200
         minRadius = 5
-        bubble_area_prop_max = 0.2
+        bubble_area_prop_max = 0.1 #0.2 (cuz hough_param2 increases from 10 to 15)
         bubble_cc_max_area_prop_max = 0.14 #(0.08:cas5_stem+0.2:Alclat2_stem)/2
         second_ero_kernel_sz = 3
         second_clo_kernel_sz = 10
         second_width_max = 0.85#cas2.2 img_idx=232, width=0.41/ img_idx=208, width=0.8
         second_rect_dens_max = 0.3
         second_area_max = 0.2
+        hough_param2=15#10
     
     bin_stem_stack = bin_stack*is_stem_mat2
     '''1st stage'''
@@ -330,7 +334,7 @@ else:
         '''
         bubble detection
         '''
-        bubble_stack,has_bubble_vec= detect_bubble(filter_stack, minRadius = minRadius)
+        bubble_stack,has_bubble_vec= detect_bubble(filter_stack, minRadius = minRadius, hough_param2=hough_param2)
         
         if is_save==True:
             max_filter_stack = np.max(np.max(filter_stack,2),1) + 1 #"+1" to avoid divide by 0. TODO: remove "+1" but replace 0 by 1
@@ -349,8 +353,12 @@ else:
         bubble_area_prop_vec = calc_bubble_area_prop(bubble_stack,is_stem_mat2,chunk_folder,is_save=is_save,plot_interm=plot_interm)
         poor_qual_set = np.where(bubble_area_prop_vec >= bubble_area_prop_max)[0]
         
-        bubble_cc_max_area_prop_vec = calc_bubble_cc_max_area_p(bubble_stack,is_stem_mat2,chunk_folder,is_save=is_save,plot_interm=plot_interm)
-        poor_qual_set_cc = np.where(bubble_cc_max_area_prop_vec>=bubble_cc_max_area_prop_max)[0]
+        if version_num >= 9.5:
+            bubble_cc_max_area_prop_vec = calc_bubble_cc_max_area_p(bubble_stack,is_stem_mat2,chunk_folder,is_save=is_save,plot_interm=plot_interm)
+            poor_qual_set_cc = np.where(bubble_cc_max_area_prop_vec>=bubble_cc_max_area_prop_max)[0]
+            poor_qual_set1 = poor_qual_set_cc#for 1st stage
+        elif version_num >= 9:
+            poor_qual_set1 = poor_qual_set
         '''
         shift detection
         '''
@@ -358,7 +366,7 @@ else:
         
         
         for img_idx in range(0, bin_stack.shape[0]):
-            if img_idx not in poor_qual_set_cc:
+            if img_idx not in poor_qual_set1:
                 #the if condition above saves some time but doesn't change much results 
                 #(cuz some predictions would be blocked by shift_th)
                 #results effective on img_idx=5,8 of cas 2.2 stem
@@ -432,12 +440,12 @@ else:
 #                    
 #                cc_area_too_small = cc_area
 #                for cc_idx in range(1,num_cc):#1: ignore bgd(0)
-
-#        '''
-#        remove imgs with bubble before rolling window
-#        '''
-#        no_bubble_stack = 1-bubble_stack
-#        final_stack=final_stack1*no_bubble_stack
+        if version_num==9.65:
+            '''
+            remove imgs with bubble before rolling window
+            '''
+            no_bubble_stack = 1-bubble_stack
+            final_stack21=final_stack1*no_bubble_stack
         
         '''
         Don't count as embolism if it keeps appearing (probably is plastic cover) (rolling window)
@@ -474,11 +482,12 @@ else:
         emb_cand_stack = np.repeat(emb_cand_each_img1[:,:,np.newaxis],final_stack.shape[2],2)
         final_stack = emb_cand_stack*final_stack
         
-#            '''
-#            remove imgs with bubble after rolling window (v9.6)
-#            '''
-#            no_bubble_stack = 1-bubble_stack
-#            final_stack=final_stack*no_bubble_stack
+        if version_num==9.6:
+            '''
+            remove imgs with bubble after rolling window (v9.6)
+            '''
+            no_bubble_stack = 1-bubble_stack
+            final_stack=final_stack*no_bubble_stack
         
     else:    
         final_stack = np.copy(final_stack1)
@@ -623,11 +632,12 @@ else:
         metrix_cluster = calc_metric(con_df_cluster)
         
         if is_stem==True:
-            true_emb_bubble_area = subset_vec_set(bubble_area_prop_vec,start_img_idx,np.where(true_has_emb)[0],output_row_name='bubble_area_prop')
-            poor_qual_bubble_area = subset_vec_set(bubble_area_prop_vec,start_img_idx,poor_qual_set,output_row_name='bubble_area_prop')
-            
-            true_emb_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,np.where(true_has_emb)[0],output_row_name='bubble_cc_max_area_prop')
-            poor_qual_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,poor_qual_set_cc,output_row_name='bubble_cc_max_area_prop')
+            if version_num >= 9:
+                true_emb_bubble_area = subset_vec_set(bubble_area_prop_vec,start_img_idx,np.where(true_has_emb)[0],output_row_name='bubble_area_prop')
+                poor_qual_bubble_area = subset_vec_set(bubble_area_prop_vec,start_img_idx,poor_qual_set,output_row_name='bubble_area_prop')
+            if version_num >= 9.5:
+                true_emb_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,np.where(true_has_emb)[0],output_row_name='bubble_cc_max_area_prop')
+                poor_qual_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,poor_qual_set_cc,output_row_name='bubble_cc_max_area_prop')
         if is_save ==True:
             with open (chunk_folder + '/confusion_mat_file.txt',"w") as f:
                 f.write(f'used time: {diff_min_sec[0]} min {diff_min_sec[1]} sec\n\n')
@@ -657,23 +667,27 @@ else:
                     f.write('img index with bubble:\n')
                     f.write(str(has_bubble_idx+(start_img_idx-1)))
                     f.write(str("\n\n"))
-                    f.write(f'poor_qual_set size: {len(poor_qual_set)}/{(img_num-1)} = {round(len(poor_qual_set)/(img_num-1)*100,2)} %\n')
-                    f.write(f'poor_qual_set:\n{poor_qual_set}\n')
-                    f.write(f'bubble_area_prop of poor_qual_set:\n{poor_qual_bubble_area}\n\n')
-                    f.write(f'bubble_area_prop of true_emb:\n{true_emb_bubble_area}')
+                    if version_num >= 9:
+                        f.write(f'poor_qual_set size: {len(poor_qual_set)}/{(img_num-1)} = {round(len(poor_qual_set)/(img_num-1)*100,2)} %\n')
+                        f.write(f'poor_qual_set:\n{poor_qual_set}\n')
+                        f.write(f'bubble_area_prop of poor_qual_set:\n{poor_qual_bubble_area}\n\n')
+                        f.write(f'bubble_area_prop of true_emb:\n{true_emb_bubble_area}')
                     f.write(str("\n\n"))
-                    f.write(f'poor_qual_set_cc size: {len(poor_qual_set_cc)}/{(img_num-1)} = {round(len(poor_qual_set_cc)/(img_num-1)*100,2)} %\n')
-                    f.write(f'poor_qual_set_cc:\n{poor_qual_set_cc}\n')
-                    f.write(f'bubble_cc_max_area_prop of poor_qual_set_cc:\n{poor_qual_bubble_cc_max_area}\n\n')
-                    f.write(f'bubble_cc_max_area_prop of true_emb:\n{true_emb_bubble_cc_max_area}')
-                    f.write(str("\n\n"))
+                    if version_num >= 9.5: 
+                        f.write(f'poor_qual_set_cc size: {len(poor_qual_set_cc)}/{(img_num-1)} = {round(len(poor_qual_set_cc)/(img_num-1)*100,2)} %\n')
+                        f.write(f'poor_qual_set_cc:\n{poor_qual_set_cc}\n')
+                        f.write(f'bubble_cc_max_area_prop of poor_qual_set_cc:\n{poor_qual_bubble_cc_max_area}\n\n')
+                        f.write(f'bubble_cc_max_area_prop of true_emb:\n{true_emb_bubble_cc_max_area}')
+                        f.write(str("\n\n"))
                     f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {round(len(poor_qual_set2)/(img_num-1)*100,2)} %\n')
                     f.write(f'poor_qual_set2:\n{poor_qual_set2}\n\n')
                     
     else:#match ==False, no more confusion matrix
         if is_stem==True:
-            poor_qual_bubble_area = subset_vec_set(bubble_area_prop_vec,start_img_idx,poor_qual_set,output_row_name='bubble_area_prop')
-            poor_qual_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,poor_qual_set_cc,output_row_name='bubble_cc_max_area_prop')
+            if version_num >= 9:
+                poor_qual_bubble_area = subset_vec_set(bubble_area_prop_vec,start_img_idx,poor_qual_set,output_row_name='bubble_area_prop')
+            if version_num >= 9.5:
+                poor_qual_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,poor_qual_set_cc,output_row_name='bubble_cc_max_area_prop')
         has_emb_idx = np.where(has_embolism)[0]
         if is_save ==True:
             with open (chunk_folder + '/results_summary.txt',"w") as f:
@@ -686,10 +700,14 @@ else:
                     f.write('img index with bubble:\n')
                     f.write(str(has_bubble_idx+(start_img_idx-1)))
                     f.write(str("\n\n"))
-                    f.write(f'poor_qual_set size: {len(poor_qual_set)}/{(img_num-1)} = {round(len(poor_qual_set)/(img_num-1)*100,2)} %\n')
-                    f.write(f'poor_qual_set:\n{poor_qual_set}\n')
-                    f.write(f'bubble_area_prop of poor_qual_set:\n{poor_qual_bubble_area}\n\n')
-                    f.write(str("\n\n"))
+                    if version_num >= 9:
+                        f.write(f'poor_qual_set size: {len(poor_qual_set)}/{(img_num-1)} = {round(len(poor_qual_set)/(img_num-1)*100,2)} %\n')
+                        f.write(f'poor_qual_set:\n{poor_qual_set}\n')
+                        f.write(f'bubble_area_prop of poor_qual_set:\n{poor_qual_bubble_area}\n\n')
+                        f.write(str("\n\n"))
+                    if version_num >= 9.5:
+                        f.write(f'bubble_cc_max_area_prop of poor_qual_set_cc:\n{poor_qual_bubble_cc_max_area}\n\n')
+                        f.write(str("\n\n"))
                     f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {round(len(poor_qual_set2)/(img_num-1)*100,2)} %\n')
                     f.write(f'poor_qual_set2:\n{poor_qual_set2}')
 
