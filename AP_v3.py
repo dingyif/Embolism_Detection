@@ -36,9 +36,9 @@ folder_idx_arg = args.folder_idx
 disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 #disk_path = 'E:/Diane/Col/research/code/'
 if args.has_proc==1:
-    has_processed = False#Working on Processed data or Unprocessed data
+    has_processed = True#Working on Processed data or Unprocessed data
 else:
-    has_processed = True
+    has_processed = False
 
 chunk_idx = args.chunk_idx#starts from 0
 chunk_size = args.chunk_size#4000#the number of imgs to process at a time
