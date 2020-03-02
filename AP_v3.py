@@ -101,7 +101,7 @@ else:
 #    has_tif.append(i)##commented out for-loop for img_folder
     if match==True:
         print("has tiff")    
-        #real_start_img_idx = int(cand_match.group('start_img_idx'))
+        real_start_img_idx = int(cand_match.group('start_img_idx'))
         real_end_img_idx = int(cand_match.group('end_img_idx')) + 1#+1 cuz tiff has the same size as diff_stack, which has a smaller size (by 1 img) than img_stack
         #ex: c5 stem
     #get which folder its processing now
@@ -124,7 +124,7 @@ else:
     
     start_img_idx = 1+chunk_idx*(chunk_size-1)#real_start_img_idx+chunk_idx*(chunk_size-1)
     if match==True:
-        end_img_idx = min(min(start_img_idx+chunk_size-1,len(img_paths)),real_end_img_idx)
+        end_img_idx = min(min(start_img_idx+chunk_size-1,len(img_paths)),real_end_img_idx-(real_start_img_idx-1))
         #real_end_img_idx for in3_stem, or else run into OSError("image file is truncated") because last 2 imgs are truncated & corrupted
     else:
         end_img_idx = min(start_img_idx+chunk_size-1,len(img_paths))
@@ -174,7 +174,7 @@ else:
     if ignore_num >0:
         img_num = img_num - ignore_num# so that there won't  be error with add_img_info_to_stack
         img_stack = img_stack[:img_num,:,:]
-        end_img_idx = end_img_idx - ignore_num; #s.t. no "index out of bounds" for extract_foregroundRGB c5_stem (chunk_idx=6,chunk_size=200) #not sure
+        end_img_idx = end_img_idx - ignore_num; #s.t. no "index out of bounds" for extract_foregroundRGB c5_stem (chunk_idx=6,chunk_size=200) #not sure if this solves for a5.2
     
         
     print("finish loading img")
