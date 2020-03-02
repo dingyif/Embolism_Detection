@@ -26,7 +26,7 @@ folder_idx_arg = 3
 #disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 disk_path = 'E:/Diane/Col/research/code/'
 has_processed = True#Working on Processed data or Unprocessed data
-chunk_idx = 6#starts from 0
+chunk_idx = 0#starts from 0
 chunk_size = 200#the number of imgs to process at a time #try to be a multiple of window_size(200), or else last stage of rolling window doesn't work well
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
@@ -505,10 +505,12 @@ else:
             cc_area_max = 75000
             cc_width_min = 25	
             cc_width_max = 200#100#v9.82(100-->150):#v9.83(150-->200) c5_stem img_idx=28: cc_width=157#basically useless
+            weak_emb_height_min = 25#hasn't tuned
+            weak_emb_area_min = 500#hasn't tuned
             
             final_stack_prev_stage = np.copy(final_stack)
             input_stack = filter_stack*final_stack_prev_stage
-            final_stack,invalid_emb_set,cleaned_but_not_all_invalid_set = remove_cc_by_geo(input_stack,final_stack_prev_stage,has_embolism1,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max)
+            final_stack,geo_invalid_emb_set,cleaned_but_not_all_geo_invalid_set,weak_emb_cand_set = remove_cc_by_geo(input_stack,final_stack_prev_stage,has_embolism1,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max,weak_emb_height_min,weak_emb_area_min)
 
     else:    
         final_stack = np.copy(final_stack1)
@@ -651,7 +653,12 @@ else:
         con_df_cluster, tp_area, fp_area,tp_height,fp_height,tp_width,fp_width = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10, chunk_folder=chunk_folder,is_save=is_save)    
             
         metrix_cluster = calc_metric(con_df_cluster)
-        
+        if version_num >= 9.8:
+            #make sure fn are in weak_emb_cand_set
+            weak_emb_cand_arr = np.asarray(weak_emb_cand_set)#list to array
+            fn_in_weak_cand_vec = np.isin(weak_emb_cand_set,con_img_list[2])
+            fn_in_weak_cand_idx = weak_emb_cand_arr[fn_in_weak_cand_vec]
+            
         if is_stem==True:
             if version_num >= 9:
                 true_emb_bubble_area = subset_vec_set(bubble_area_prop_vec,start_img_idx,np.where(true_has_emb)[0],output_row_name='bubble_area_prop')
@@ -704,9 +711,12 @@ else:
                         f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {round(len(poor_qual_set2)/(img_num-1)*100,2)} %\n')
                         f.write(f'poor_qual_set2:\n{poor_qual_set2}\n\n')
                     if version_num >= 9.8:
-                        f.write(f'invalid_emb_set:{invalid_emb_set}\n')
-                        f.write(f'cleaned_but_not_all_invalid_set:{cleaned_but_not_all_invalid_set}\n\n')
-                    
+                        f.write(f'geo_invalid_emb_set:{geo_invalid_emb_set}\n')
+                        f.write(f'cleaned_but_not_all_geo_invalid_set:{cleaned_but_not_all_geo_invalid_set}\n\n')
+                        f.write(f'weak_emb_cand_set:{weak_emb_cand_set}\n')
+                        if len(con_img_list[2])>0:
+                            f.write(f'the number fn in weak_emb_cand_set/the number of fn:{len(fn_in_weak_cand_idx)}/{len(con_img_list[2])}\n')
+                            f.write(f'fn_in_weak_cand_idx:{fn_in_weak_cand_idx}\n')
     else:#match ==False, no more confusion matrix
         if is_stem==True:
             if version_num >= 9:
@@ -737,8 +747,9 @@ else:
                         f.write(f'poor_qual_set2 size: {len(poor_qual_set2)}/{(img_num-1)} = {round(len(poor_qual_set2)/(img_num-1)*100,2)} %\n')
                         f.write(f'poor_qual_set2:\n{poor_qual_set2}')
                     if version_num >= 9.8:
-                        f.write(f'invalid_emb_set:{invalid_emb_set}\n')
-                        f.write(f'cleaned_but_not_all_invalid_set:{cleaned_but_not_all_invalid_set}\n\n')
+                        f.write(f'geo_invalid_emb_set:{geo_invalid_emb_set}\n')
+                        f.write(f'cleaned_but_not_all_geo_invalid_set:{cleaned_but_not_all_geo_invalid_set}\n\n')
+                        f.write(f'weak_emb_cand_set:{weak_emb_cand_set}\n')
                 
     
             

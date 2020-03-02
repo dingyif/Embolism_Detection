@@ -1156,13 +1156,13 @@ def print_used_time(start_time):
     print('used time: ',diff_min_sec[0],'min ',diff_min_sec[1],'sec')
     return(diff_min_sec)
 
-def remove_cc_by_geo(input_stack,final_stack_prev_stage,has_embolism1,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max):
+def remove_cc_by_geo(input_stack,final_stack_prev_stage,has_embolism1,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max,weak_emb_height_min,weak_emb_area_min):
     '''
-    remove short/too small/too big/too wide cc
-    remove cc wide but not tall
+    remove cc by basic geometric shape propoerties: short/too small/too big/too wide/wide but not tall
     '''
     invalid_emb_set = []#entire img being cleaned to 0
     cleaned_but_not_all_invalid_set=[]#some cc in the img being cleaned to 0
+    weak_emb_cand_set = []#entire img being cleaned to 0, but some cc are too short/small --> possibly weak emb
     output_stack = np.zeros(final_stack_prev_stage.shape)
     for img_idx in np.where(has_embolism1)[0]:
         img = input_stack[img_idx,:,:]
@@ -1177,6 +1177,9 @@ def remove_cc_by_geo(input_stack,final_stack_prev_stage,has_embolism1,blur_radiu
         
         cc_valid_labels = np.where((cc_height > cc_height_min)*(cc_area > cc_area_min)*(cc_area < cc_area_max)*(cc_width > cc_width_min)*(cc_width < cc_width_max)*(cc_width < cc_height))[0]
         
+        has_short_emb = np.any((cc_height <= cc_height_min)*(cc_height > weak_emb_height_min)*(cc_width > cc_width_min)*(cc_width < cc_width_max)*(cc_width < cc_height))#shorter
+        has_small_emb = np.any((cc_area <= cc_area_min)*(cc_area > weak_emb_area_min)*(cc_width > cc_width_min)*(cc_width < cc_width_max)*(cc_width < cc_height))#smaller
+        
         mat_cc_valid = img*0
         if cc_valid_labels.size > 0:#not all invalid
             for cc_idx in (cc_valid_labels+1):#+1 cuz ignore bgd before
@@ -1187,8 +1190,10 @@ def remove_cc_by_geo(input_stack,final_stack_prev_stage,has_embolism1,blur_radiu
                 cleaned_but_not_all_invalid_set.append(img_idx)
         else:
             invalid_emb_set.append(img_idx)
+            if has_short_emb or has_small_emb:
+                weak_emb_cand_set.append(img_idx)
         output_stack[img_idx,:,:]= mat_cc_valid*final_stack_prev_stage[img_idx,:,:]#or *(img>0)*255
-    return output_stack,invalid_emb_set,cleaned_but_not_all_invalid_set
+    return output_stack,invalid_emb_set,cleaned_but_not_all_invalid_set,weak_emb_cand_set
 
 
 
