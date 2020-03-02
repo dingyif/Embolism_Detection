@@ -102,8 +102,8 @@ else:
     if match==True:
         print("has tiff")    
         #real_start_img_idx = int(cand_match.group('start_img_idx'))
-        real_end_img_idx = int(cand_match.group('end_img_idx'))# + 1
-    
+        real_end_img_idx = int(cand_match.group('end_img_idx')) + 1#+1 cuz tiff has the same size as diff_stack, which has a smaller size (by 1 img) than img_stack
+        #ex: c5 stem
     #get which folder its processing now
     img_folder_name = os.path.split(img_folder)[1]
     print(f'Image Folder Name: {img_folder_name}')
@@ -145,7 +145,7 @@ else:
     
     ignore_num = 0 
     img_re_idx = 0 #relative index for images in start_img_idx to end_img_idx
-    for filename in img_paths[start_img_idx-1:]: #original img: 958 rowsx646 cols
+    for filename in img_paths[(start_img_idx-1):]: #original img: 958 rowsx646 cols
         #can't just use end_img_idx for img_paths cuz of th.jpg
         if img_re_idx < chunk_size and img_re_idx < end_img_idx:#real_end_img_idx for in3_stem, or else run into OSError("image file is truncated")
             if img_re_idx%100==0:#for debugging on server
@@ -174,6 +174,7 @@ else:
     if ignore_num >0:
         img_num = img_num - ignore_num# so that there won't  be error with add_img_info_to_stack
         img_stack = img_stack[:img_num,:,:]
+        end_img_idx = end_img_idx - ignore_num; #s.t. no "index out of bounds" for extract_foregroundRGB c5_stem (chunk_idx=6,chunk_size=200) #not sure
     
         
     print("finish loading img")
@@ -253,15 +254,27 @@ else:
             #quan_th: 0.9 --> 0.8 and expand_radius_ratio=9 --> 8
             is_stem_matB = np.ones(img_stack.shape)
             img_re_idx = 0
-            for filename in img_paths[(start_img_idx-1):end_img_idx]: 
-                imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
-                imgBarray=imgRGB_arr[:,:,2] #only look at B layer
-                #put in the correct data structure
-                if img_re_idx==0 and is_save==True:
-                    is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
-                else:
-                    is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9)
-                img_re_idx = img_re_idx + 1
+            if is_flip==False:
+                for filename in img_paths[(start_img_idx-1):end_img_idx]: 
+                    imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
+                    imgBarray=imgRGB_arr[:,:,2] #only look at B layer
+                    #put in the correct data structure
+                    if img_re_idx==0 and is_save==True:
+                        #v9.85: add img_nrow to foreground_B
+                        is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_nrow,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
+                    else:
+                        is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_nrow,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9)
+                    img_re_idx = img_re_idx + 1
+            else:
+                for filename in img_paths[(start_img_idx-1):end_img_idx]: 
+                    imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
+                    imgBarray=imgRGB_arr[:,:,2] #only look at B layer
+                    #put in the correct data structure
+                    if img_re_idx==0 and is_save==True:
+                        is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_ncol,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
+                    else:
+                        is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_ncol,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9)
+                    img_re_idx = img_re_idx + 1
             is_stem_mat = is_stem_matG*is_stem_matB
         else:
             is_stem_mat=is_stem_matG #(w/o v9.7)
@@ -315,7 +328,10 @@ else:
         final_area_th = 78
         max_emb_prop = 0.3#(has to be > 0.05 for a2_stem img_idx=224; has to > 0.19 for c4_stem img_idx=39; has to <0.29 for a4_stem img_idx=5; but has to be <0.19 for a4_stem img_idx=1
         #TODO: don't use max_emb_prop, but use img_sum?
-        density_th = 0.35#<0.395 for cas5_stem #<0.36 in4_stem img_idx=232
+        if version_num >= 9.84:
+            density_th = 0.3#<0.32 for cas2.2 stem img_idx=184
+        else:
+            density_th = 0.35#<0.395 for cas5_stem #<0.36 in4_stem img_idx=232
         num_px_th = 50
         ratio_th=35  
         final_area_th2 = 80

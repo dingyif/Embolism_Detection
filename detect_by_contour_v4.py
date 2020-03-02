@@ -22,6 +22,7 @@ import density#self-written density.py
 from collections import Counter#for count 1,2 in overlap mat
 import seaborn as sns
 import datetime
+import scipy.signal
 #############################################################################
 #    Sanity check:
 #    see if the sum of pixel values in an image of diff_pos_stack
@@ -202,15 +203,16 @@ def extract_foregroundRGB(img_2d,img_re_idx,chunk_folder, blur_radius=10.0,expan
         plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_G_3_is_stem_matG.jpg",is_stem_mat,cmap='gray')
     return(is_stem_mat)#logical 2D array
 
-def foreground_B(img_2d,img_re_idx,chunk_folder,quan_th=0.9, G_max = 160,blur_radius=10.0,expand_radius_ratio=9,is_save=False):
+def foreground_B(img_2d,img_nrow,img_re_idx,chunk_folder,quan_th=0.9, G_max = 160,blur_radius=10.0,expand_radius_ratio=9,is_save=False):
     '''
     assume stem is more blue than bark (i.e. stem is whiter than bark)
     G_max is introduced because of in3_stem
+    assume height of stem > img_nrow/2
     '''
     
     #smoothing (gaussian filter)
     smooth_img = ndimage.gaussian_filter(img_2d, blur_radius)
-    
+   
     is_stem_mat = (smooth_img > min(np.quantile(smooth_img,quan_th),G_max))*1
     
     #plot_gray_img(is_stem_mat)#1(white) for stem part
@@ -222,7 +224,11 @@ def foreground_B(img_2d,img_re_idx,chunk_folder,quan_th=0.9, G_max = 160,blur_ra
     
     if num_cc>1:#more than 1 area, don't count bgd
         area = stats[1:, cv2.CC_STAT_AREA]
-        max_cc_label = np.where(area==max(area))[0]+1#+1 cuz we exclude 0 in previous line
+        cc_h = stats[1:,cv2.CC_STAT_HEIGHT]
+        cc_valid_geo = 1*(cc_h>img_nrow/2)#assume stem is at least half as tall as img_nrow
+        #(cas5_stem img_idx>1200)
+        area_valid = area*cc_valid_geo#map invalid one's area to 0
+        max_cc_label = np.where(area_valid==max(area_valid))[0]+1#+1 cuz we exclude 0 in previous line
         is_stem_mat = (mat_cc==max_cc_label)*1
     else:#no part is being selected as stem --> treat entire img as stem
         is_stem_mat = is_stem_mat+1
@@ -1183,3 +1189,7 @@ def remove_cc_by_geo(input_stack,final_stack_prev_stage,has_embolism1,blur_radiu
             invalid_emb_set.append(img_idx)
         output_stack[img_idx,:,:]= mat_cc_valid*final_stack_prev_stage[img_idx,:,:]#or *(img>0)*255
     return output_stack,invalid_emb_set,cleaned_but_not_all_invalid_set
+
+
+
+
