@@ -25,7 +25,8 @@ img_folder_rel = os.path.join(disk_path,"Done", "Processed")
 all_folders_name = os.listdir(img_folder_rel)
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 #for i, img_folder in enumerate(all_folders_dir):
-img_folder = all_folders_dir[0]
+img_folder = all_folders_dir[1]
+print("img_folder:",img_folder)
 img_paths = sorted(glob.glob(img_folder + '/*.png'))
 tiff_paths = sorted(glob.glob(img_folder + '/*.tif'))
 #make sure it have tif file in there
