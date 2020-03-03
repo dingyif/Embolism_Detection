@@ -8,11 +8,11 @@ import cv2
 import os,shutil#for creating/emptying folders
 import re
 import sys
-from detect_by_contour_v4 import plot_gray_img, to_binary,plot_img_sum, plot_overlap_sum
-from detect_by_contour_v4 import add_img_info_to_stack, extract_foregroundRGB,foreground_B
-from detect_by_contour_v4 import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set, remove_cc_by_geo
-from detect_by_contour_v4 import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
-from detect_by_contour_v4 import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric,print_used_time
+from func import plot_gray_img, to_binary,plot_img_sum, plot_overlap_sum
+from func import add_img_info_to_stack, extract_foregroundRGB,foreground_B
+from func import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set, remove_cc_by_geo
+from func import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
+from func import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric,print_used_time
 from density import density_of_a_rect
 from detect_by_filter_fx import median_filter_stack
 import math
