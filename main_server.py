@@ -585,7 +585,7 @@ else:
     print("2nd stage done")
     
     #time
-    diff_min_sec=print_used_time(start_time)
+    print_used_time(start_time)
     
     if match==True:
         #combined with true tif file
@@ -610,7 +610,7 @@ else:
         #tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo_small.tif',255-before_rm_cc_geo_stack_small.astype(np.uint8))
         print("saved tif files")
     
-    
+    diff_min_sec=print_used_time(start_time)
     has_embolism = img_contain_emb(final_stack)
     
     if match==True:    
