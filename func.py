@@ -1195,6 +1195,13 @@ def remove_cc_by_geo(input_stack,final_stack_prev_stage,has_embolism1,blur_radiu
         output_stack[img_idx,:,:]= mat_cc_valid*final_stack_prev_stage[img_idx,:,:]#or *(img>0)*255
     return output_stack,invalid_emb_set,cleaned_but_not_all_invalid_set,weak_emb_cand_set
 
-
+def mat_reshape(x_mat, height: int = 256, width:int = 256):
+  '''
+  reshape x_mat into ndarray height* width
+  '''
+  x_mat_reshape = np.ndarray((x_mat.shape[0],height,width))
+  for i,mat in enumerate(x_mat):
+    x_mat_reshape[i] = cv2.resize(x_mat[i],(width,height))
+  return x_mat_reshape
 
 

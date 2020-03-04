@@ -9,7 +9,7 @@ import os,shutil#for creating/emptying folders
 import re
 import sys
 from func import plot_gray_img, to_binary,plot_img_sum, plot_overlap_sum
-from func import add_img_info_to_stack, extract_foregroundRGB,foreground_B
+from func import add_img_info_to_stack, extract_foregroundRGB,foreground_B,mat_reshape
 from func import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set, remove_cc_by_geo
 from func import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
 from func import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric,print_used_time
@@ -501,6 +501,7 @@ else:
         
         final_stack_prev_stage = np.copy(final_stack)
         input_stack = filter_stack*final_stack_prev_stage
+        #before_rm_cc_geo_stack_small = mat_reshape(final_stack_prev_stage,round(img_nrow/3),round(img_ncol/3))#reshape to 256x256. can barely see the weak emb?
         final_stack,geo_invalid_emb_set,cleaned_but_not_all_geo_invalid_set,weak_emb_cand_set = remove_cc_by_geo(input_stack,final_stack_prev_stage,has_embolism1,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max,weak_emb_height_min,weak_emb_area_min)
 
     else:    
@@ -591,6 +592,8 @@ else:
         tiff.imsave(chunk_folder+'/combined_4.tif', final_combined_inv_info)
         tiff.imsave(chunk_folder+'/predict.tif',255-final_stack.astype(np.uint8))
         tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
+        tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo.tif',255-final_stack_prev_stage.astype(np.uint8))
+        #tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo_small.tif',255-before_rm_cc_geo_stack_small.astype(np.uint8))
         print("saved tif files")
     
     
