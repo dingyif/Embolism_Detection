@@ -153,22 +153,31 @@ else:
                 img_stack = np.ndarray((img_num,img_nrow,img_ncol), dtype=np.float32)
                 print("img size:",img_nrow," x ", img_ncol)
             
-            #if img_array.shape[0]==img_nrow and img_array.shape[1]==img_ncol:
-            if img_array_resize.shape[0]==img_nrow and img_array_resize.shape[1]==img_ncol:    
-                if resize:
+            if resize:
+                if img_array_resize.shape[0]==img_nrow and img_array_resize.shape[1]==img_ncol:
                     img_stack[img_re_idx] = img_array_resize
+                    img_re_idx = img_re_idx + 1
+                    img_num_real += 1
                 else:
-                    img_stack[img_re_idx] = img_array
-                img_re_idx = img_re_idx + 1
-                img_num_real += 1
+                    #to avoid error produced by th.jpg or preview.png
+                    #ValueError: could not broadcast input array from shape (768,1024) into shape (1944,2592)
+                    #ex: in ImagesNotYetProcessed\dacexc2.2_stem or Processed/a5.2_stem
+                    print("Different img size",filename)
+                    img_paths.remove(filename)#remove from the list -->won't cause problem in extract_foregroundRGB, add_img_info_to_stack
+                    ignore_num += 1
             else:
-                #to avoid error produced by th.jpg or preview.png
-                #ValueError: could not broadcast input array from shape (768,1024) into shape (1944,2592)
-                #ex: in ImagesNotYetProcessed\dacexc2.2_stem
-                #(I manually deleted Processed/ALCLAT5.2_Stem/tl_0002_0001_20190726_103828.jpg.t0002.th.jpg)
-                print("Different img size",filename)
-                img_paths.remove(filename)#remove from the list -->won't cause problem in extract_foregroundRGB, add_img_info_to_stack
-                ignore_num += 1
+                if img_array.shape[0]==img_nrow and img_array.shape[1]==img_ncol:
+                    img_stack[img_re_idx] = img_array
+                    img_re_idx = img_re_idx + 1
+                    img_num_real += 1
+                else:
+                    #to avoid error produced by th.jpg or preview.png
+                    #ValueError: could not broadcast input array from shape (768,1024) into shape (1944,2592)
+                    #ex: in ImagesNotYetProcessed\dacexc2.2_stem or Processed/a5.2_stem
+                    print("Different img size",filename)
+                    img_paths.remove(filename)#remove from the list -->won't cause problem in extract_foregroundRGB, add_img_info_to_stack
+                    ignore_num += 1
+            
     
     if ignore_num >0:
         img_num = img_num_real
@@ -534,16 +543,16 @@ else:
         cc_area_max = 75000
         cc_width_min = 25	
         cc_width_max = 200#100#v9.82(100-->150):#v9.83(150-->200) c5_stem img_idx=28: cc_width=157#basically useless
-        weak_emb_height_min = 25#hasn't tuned
-        weak_emb_area_min = 500#hasn't tuned
-        cc_dens_min = 1500#hasn't tuned yet
+        weak_emb_height_min = 25#hasn't tuned #maybe to 30?(cas5.5 stem, 148.jpg (has emb): 33)
+        weak_emb_area_min = 500#hasn't tuned(cas5.5 stem, 148.jpg (has emb): 707) 
+        cc_dens_min = 1000#hasn't tuned yet(cas5.5 stem, 148.jpg (has emb): 1253) 
         
         final_stack_prev_stage = np.copy(final_stack)
         input_stack = filter_stack*final_stack_prev_stage
         #before_rm_cc_geo_stack_small = mat_reshape(final_stack_prev_stage,round(img_nrow/3),round(img_ncol/3))#reshape to 256x256. can barely see the weak emb?
         final_stack,geo_invalid_emb_set,cleaned_but_not_all_geo_invalid_set,weak_emb_cand_set = remove_cc_by_geo(input_stack,final_stack_prev_stage,has_embolism1,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max,weak_emb_height_min,weak_emb_area_min)
         if version_num >= 9.9:
-            weak_emb_stack,has_weak_emb_set = rescue_weak_emb_by_dens(input_stack,final_stack_prev_stage,weak_emb_cand_set,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max,weak_emb_height_min,weak_emb_area_min,cc_dens_min)
+            weak_emb_stack,has_weak_emb_set = rescue_weak_emb_by_dens(input_stack,final_stack_prev_stage,weak_emb_cand_set,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max,weak_emb_height_min,weak_emb_area_min,cc_dens_min,plot_interm)
             final_stack = final_stack + weak_emb_stack
             #weak_emb_stack would be 0/1, and only have 1 in has_weak_emb_set.
             #TODO: add weak_emb_stack to the result from CNN
@@ -698,10 +707,10 @@ else:
         fn_in_weak_cand_idx = weak_emb_cand_arr[fn_in_weak_cand_vec]
         
         if version_num >= 9.9:
-            #after rescue_weak_emb_by_dens, are all fn in fn_in_weak_cand_idx being rescued?
+            #after rescue_weak_emb_by_dens, how many fn are being rescued to tp?
             has_weak_emb_arr = np.asarray(has_weak_emb_set)#list to array
-            fn_in_has_weak_emb_vec = np.isin(has_weak_emb_arr,fn_in_weak_cand_idx)
-            fn_in_has_weak_emb_idx = has_weak_emb_arr[fn_in_has_weak_emb_vec]
+            tp_in_has_weak_emb_vec = np.isin(has_weak_emb_arr,con_img_list[3])
+            tp_in_has_weak_emb_idx = has_weak_emb_arr[tp_in_has_weak_emb_vec]
         
             
         if is_stem==True:
@@ -739,14 +748,12 @@ else:
                     f.write(f'geo_invalid_emb_set:{geo_invalid_emb_set}\n')
                     f.write(f'cleaned_but_not_all_geo_invalid_set:{cleaned_but_not_all_geo_invalid_set}\n\n')
                     f.write(f'weak_emb_cand_set:{weak_emb_cand_set}\n')
-                    if len(con_img_list[2])>0:
-                        f.write(f'the number fn in weak_emb_cand_set/the number of fn: {len(fn_in_weak_cand_idx)}/{len(con_img_list[2])}\n')
-                        f.write(f'fn_in_weak_cand_idx:{fn_in_weak_cand_idx}\n')
                     if version_num >= 9.9:
                         f.write(f'\nhas_weak_emb_set(rescue_weak_emb_by_dens):{has_weak_emb_set}\n')
-                        if len(fn_in_weak_cand_idx)>0:
-                            f.write(f'the number fn in has_weak_emb_set/the number of fn_in_weak_cand_idx in : {len(fn_in_has_weak_emb_idx)}/{len(fn_in_weak_cand_idx)}\n')
-                            f.write(f'fn_in_has_weak_emb_idx:{fn_in_has_weak_emb_idx}\n')
+                        f.write(f'tp_in_has_weak_emb_idx:{tp_in_has_weak_emb_idx}\n')
+                    elif len(con_img_list[2])>0:
+                        f.write(f'the number fn in weak_emb_cand_set/the number of fn: {len(fn_in_weak_cand_idx)}/{len(con_img_list[2])}\n')
+                        f.write(f'fn_in_weak_cand_idx:{fn_in_weak_cand_idx}\n')
     else:#match ==False, no more confusion matrix
         if is_stem==True:
             poor_qual_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,poor_qual_set_cc,output_row_name='bubble_cc_max_area_prop')
