@@ -22,20 +22,20 @@ start_time = datetime.datetime.now()
 '''
 user-specified arguments
 '''
-folder_idx_arg = 1
-#disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-disk_path = 'E:/Diane/Col/research/code/'
+folder_idx_arg = 4
+disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+#disk_path = 'E:/Diane/Col/research/code/'
 has_processed = True#Working on Processed data or Unprocessed data
 chunk_idx = 0#starts from 0
-chunk_size = 200#the number of imgs to process at a time #try to be a multiple of window_size(200), or else last stage of rolling window doesn't work well
+chunk_size = 10#the number of imgs to process at a time #try to be a multiple of window_size(200), or else last stage of rolling window doesn't work well
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
 plot_interm = False
 version_num = 9.9#9.85
 #9.9 : rescue_weak_emb_by_dens
-img_width = 900
-img_height = 600
-resize = False
+img_width = 600
+img_height = 900
+resize = True
 folder_list = []
 has_tif = []
 no_tif =[]
@@ -298,13 +298,12 @@ else:
                 #put in the correct data structure
                 if img_re_idx==0 and is_save==True:
                     if resize:
-                        is_stem_matB[img_re_idx] = foreground_B(imgBarray_resize,img_nrow,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
+                        is_stem_matB[img_re_idx] = foreground_B(imgBarray_resize,img_ncol,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
                     else:
                         is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_ncol,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
-                    
                 else:
                     if resize:
-                        is_stem_matB[img_re_idx] = foreground_B(imgBarray_resize,img_nrow,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
+                        is_stem_matB[img_re_idx] = foreground_B(imgBarray_resize,img_ncol,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9)
                     else:
                         is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_ncol,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9)
                 img_re_idx = img_re_idx + 1
@@ -571,7 +570,6 @@ else:
         #density based segmentation
         density_seg_idx = np.nonzero(num_emb_each_img/(img_nrow*img_ncol)>emb_pro_th)#images index that'll be performed density based segmentation on#TODO: tune this
         for img_idx in density_seg_idx[0]:
-                
             density_img = density_of_a_rect(bin_stem_stack[img_idx,:,:],dens_rect_window_width)
             density_img_th = density_img>dens_img_th #thresholding
             if plot_interm == True:
@@ -631,6 +629,8 @@ else:
         tm_start_img_idx = chunk_idx*(chunk_size-1)
         tm_end_img_idx = tm_start_img_idx+chunk_size-1
         true_mask = true_mask[tm_start_img_idx:tm_end_img_idx,:,:]
+        if resize:
+        	true_mask = mat_reshape(true_mask, height = img_height, width = img_width)
         combined_list = (true_mask,final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
     else:
         combined_list = (final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
@@ -643,9 +643,10 @@ else:
     if is_save==True:
         tiff.imsave(chunk_folder+'/predict.tif',255-final_stack.astype(np.uint8))
         tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
-        tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo.tif',255-final_stack_prev_stage.astype(np.uint8))
-        tiff.imsave(chunk_folder+'/weak_emb_stack.tif',255-weak_emb_stack.astype(np.uint8))
-        #tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo_small.tif',255-before_rm_cc_geo_stack_small.astype(np.uint8))
+        if is_stem == True:
+            tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo.tif',255-final_stack_prev_stage.astype(np.uint8))
+            tiff.imsave(chunk_folder+'/weak_emb_stack.tif',255-weak_emb_stack.astype(np.uint8))
+            #tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo_small.tif',255-before_rm_cc_geo_stack_small.astype(np.uint8))
         tiff.imsave(chunk_folder+'/combined_4.tif', final_combined_inv_info)
         print("saved tif files")
     
@@ -702,17 +703,18 @@ else:
         metrix_cluster = calc_metric(con_df_cluster)
         
         #make sure fn are in weak_emb_cand_set
-        weak_emb_cand_arr = np.asarray(weak_emb_cand_set)#list to array
-        fn_in_weak_cand_vec = np.isin(weak_emb_cand_set,con_img_list[2])
-        fn_in_weak_cand_idx = weak_emb_cand_arr[fn_in_weak_cand_vec]
+        if is_stem:
+            weak_emb_cand_arr = np.asarray(weak_emb_cand_set)#list to array
+            fn_in_weak_cand_vec = np.isin(weak_emb_cand_set,con_img_list[2])
+            fn_in_weak_cand_idx = weak_emb_cand_arr[fn_in_weak_cand_vec]
         
-        if version_num >= 9.9:
+        if version_num >= 9.9 and is_stem:
             #after rescue_weak_emb_by_dens, how many fn are being rescued to tp?
             has_weak_emb_arr = np.asarray(has_weak_emb_set)#list to array
             tp_in_has_weak_emb_vec = np.isin(has_weak_emb_arr,con_img_list[3])
             tp_in_has_weak_emb_idx = has_weak_emb_arr[tp_in_has_weak_emb_vec]
         
-            
+
         if is_stem==True:
             true_emb_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,np.where(true_has_emb)[0],output_row_name='bubble_cc_max_area_prop')
             poor_qual_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,poor_qual_set_cc,output_row_name='bubble_cc_max_area_prop')
