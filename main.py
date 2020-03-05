@@ -10,7 +10,7 @@ import re
 import sys
 from func import plot_gray_img, to_binary,plot_img_sum, plot_overlap_sum
 from func import add_img_info_to_stack, extract_foregroundRGB,foreground_B,mat_reshape
-from func import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set, remove_cc_by_geo
+from func import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set, remove_cc_by_geo, rescue_weak_emb_by_dens
 from func import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
 from func import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric,print_used_time
 from density import density_of_a_rect
@@ -31,7 +31,8 @@ chunk_size = 200#the number of imgs to process at a time #try to be a multiple o
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
 plot_interm = False
-version_num = 9.85
+version_num = 9.9#9.85
+#9.9 : rescue_weak_emb_by_dens
 
 folder_list = []
 has_tif = []
@@ -498,12 +499,17 @@ else:
         cc_width_max = 200#100#v9.82(100-->150):#v9.83(150-->200) c5_stem img_idx=28: cc_width=157#basically useless
         weak_emb_height_min = 25#hasn't tuned
         weak_emb_area_min = 500#hasn't tuned
+        cc_dens_min = 1500#hasn't tuned yet
         
         final_stack_prev_stage = np.copy(final_stack)
         input_stack = filter_stack*final_stack_prev_stage
         #before_rm_cc_geo_stack_small = mat_reshape(final_stack_prev_stage,round(img_nrow/3),round(img_ncol/3))#reshape to 256x256. can barely see the weak emb?
         final_stack,geo_invalid_emb_set,cleaned_but_not_all_geo_invalid_set,weak_emb_cand_set = remove_cc_by_geo(input_stack,final_stack_prev_stage,has_embolism1,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max,weak_emb_height_min,weak_emb_area_min)
-
+        if version_num >= 9.9:
+            weak_emb_stack,has_weak_emb_set = rescue_weak_emb_by_dens(input_stack,final_stack_prev_stage,weak_emb_cand_set,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max,weak_emb_height_min,weak_emb_area_min,cc_dens_min)
+            final_stack = final_stack + weak_emb_stack
+            #weak_emb_stack would be 0/1, and only have 1 in has_weak_emb_set.
+            #TODO: add weak_emb_stack to the result from CNN
     else:    
         final_stack = np.copy(final_stack1)
         '''
@@ -593,6 +599,7 @@ else:
         tiff.imsave(chunk_folder+'/predict.tif',255-final_stack.astype(np.uint8))
         tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
         tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo.tif',255-final_stack_prev_stage.astype(np.uint8))
+        tiff.imsave(chunk_folder+'/weak_emb_stack.tif',255-weak_emb_stack.astype(np.uint8))
         #tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo_small.tif',255-before_rm_cc_geo_stack_small.astype(np.uint8))
         print("saved tif files")
     
@@ -652,6 +659,13 @@ else:
         weak_emb_cand_arr = np.asarray(weak_emb_cand_set)#list to array
         fn_in_weak_cand_vec = np.isin(weak_emb_cand_set,con_img_list[2])
         fn_in_weak_cand_idx = weak_emb_cand_arr[fn_in_weak_cand_vec]
+        
+        if version_num >= 9.9:
+            #after rescue_weak_emb_by_dens, are all fn in fn_in_weak_cand_idx being rescued?
+            has_weak_emb_arr = np.asarray(has_weak_emb_set)#list to array
+            fn_in_has_weak_emb_vec = np.isin(has_weak_emb_arr,fn_in_weak_cand_idx)
+            fn_in_has_weak_emb_idx = has_weak_emb_arr[fn_in_has_weak_emb_vec]
+        
             
         if is_stem==True:
             true_emb_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,np.where(true_has_emb)[0],output_row_name='bubble_cc_max_area_prop')
@@ -691,6 +705,11 @@ else:
                     if len(con_img_list[2])>0:
                         f.write(f'the number fn in weak_emb_cand_set/the number of fn: {len(fn_in_weak_cand_idx)}/{len(con_img_list[2])}\n')
                         f.write(f'fn_in_weak_cand_idx:{fn_in_weak_cand_idx}\n')
+                    if version_num >= 9.9:
+                        f.write(f'\nhas_weak_emb_set(rescue_weak_emb_by_dens):{has_weak_emb_set}\n')
+                        if len(fn_in_weak_cand_idx)>0:
+                            f.write(f'the number fn in has_weak_emb_set/the number of fn_in_weak_cand_idx in : {len(fn_in_has_weak_emb_idx)}/{len(fn_in_weak_cand_idx)}\n')
+                            f.write(f'fn_in_has_weak_emb_idx:{fn_in_has_weak_emb_idx}\n')
     else:#match ==False, no more confusion matrix
         if is_stem==True:
             poor_qual_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,poor_qual_set_cc,output_row_name='bubble_cc_max_area_prop')
@@ -709,6 +728,8 @@ else:
                     f.write(f'geo_invalid_emb_set:{geo_invalid_emb_set}\n')
                     f.write(f'cleaned_but_not_all_geo_invalid_set:{cleaned_but_not_all_geo_invalid_set}\n\n')
                     f.write(f'weak_emb_cand_set:{weak_emb_cand_set}\n')
+                    if version_num >= 9.9:
+                        f.write(f'\nhas_weak_emb_set(rescue_weak_emb_by_dens):{has_weak_emb_set}\n')
                 
     
             
