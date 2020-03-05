@@ -1204,7 +1204,7 @@ def mat_reshape(x_mat, height: int = 256, width:int = 256):
     x_mat_reshape[i] = cv2.resize(x_mat[i],(width,height))
   return x_mat_reshape
 
-def rescue_weak_emb_by_dens(input_stack,final_stack_prev_stage,weak_emb_cand_set,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max,weak_emb_height_min,weak_emb_area_min,cc_dens_min):
+def rescue_weak_emb_by_dens(input_stack,final_stack_prev_stage,weak_emb_cand_set,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max,weak_emb_height_min,weak_emb_area_min,cc_dens_min,plot_interm=False):
     '''
     rescue weak emb (either in short_emb_labels OR small_emb_labels) from weak_emb_cand_set if the density of cc > cc_dens_min
     '''
@@ -1225,32 +1225,37 @@ def rescue_weak_emb_by_dens(input_stack,final_stack_prev_stage,weak_emb_cand_set
         small_emb_labels = np.where((cc_area <= cc_area_min)*(cc_area > weak_emb_area_min)*(cc_width > cc_width_min)*(cc_width < cc_width_max)*(cc_width < cc_height))[0]#smaller
         
         weak_emb_labels = np.unique(np.concatenate((short_emb_labels,small_emb_labels)))#join 2 list
-        #bin_img = bin_stack[img_idx,:,:]
+        
         mat_cc_valid = img*0
-        #print(img_idx)#8/16/194 (cas5.5 stem, chunk_idx =5, chunk_sz=200)
+        if plot_interm==True:
+            print(img_idx)#8/16/194 (cas5.5 stem, chunk_idx =5, chunk_sz=200)/ 148(cas5.5 stem, chunk_idx =0, chunk_sz=200)
+            #bin_img = bin_stack[img_idx,:,:]
         if weak_emb_labels.size > 0:
             for cc_idx in (weak_emb_labels+1):
                 cc_mask = 1*(mat_cc==cc_idx)
                 cc_dens = np.sum(cc_mask*smooth_img)/cc_area[cc_idx-1]
-#                    print(cc_dens)#1995/420/807
-#                    print(cc_idx)#3/2/2
-#                    print(np.sum(cc_mask*bin_img))#308/250/116
-#                    print(np.sum(cc_mask*smooth_img))#2751855/389290/451552
-#                    print(cc_area[cc_idx-1])#1379/925/559
-#                    print(cc_width[cc_idx-1])#43/37/26
-#                    print(cc_height[cc_idx-1])#46/41/27
+                if plot_interm==True:
+                    print(cc_dens)#1995/420/807/1253
+#                    print(cc_idx)#3/2/2/1
+#                    #print(np.sum(cc_mask*bin_img))#308/250/116
+#                    print(np.sum(cc_mask*smooth_img))#2751855/389290/451552/886046
+#                    print(cc_area[cc_idx-1])#1379/925/559/707
+#                    print(cc_width[cc_idx-1])#43/37/26/27
+#                    print(cc_height[cc_idx-1])#46/41/27/33
                 if cc_dens>cc_dens_min:
                     mat_cc_valid += cc_mask
             output_stack[img_idx,:,:] = mat_cc_valid*final_stack_prev_stage[img_idx,:,:]
             if mat_cc_valid.any():
-                #print(img_idx,"has weak emb")
+                if plot_interm==True:
+                    print(img_idx,"has weak emb")
+                    print("-------------------")
                 has_weak_emb_set.append(img_idx)
             
-            #debugging
-#                else:
-#                    print("no cc larger then cc_dens_min",cc_dens_min)
-#            else:
-#                print("no weak emb")
-#            print("-------------------")
-            return output_stack,has_weak_emb_set
+            elif plot_interm==True:
+                    print("no weak emb: no cc larger then cc_dens_min",cc_dens_min)
+                    print("-------------------")
+        elif plot_interm==True:
+            print("no weak emb")
+            print("-------------------")
+    return output_stack,has_weak_emb_set
             
