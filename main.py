@@ -298,12 +298,12 @@ else:
                 #put in the correct data structure
                 if img_re_idx==0 and is_save==True:
                     if resize:
-                        is_stem_matB[img_re_idx] = foreground_B(imgBarray_resize,img_nrow,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
+                        is_stem_matB[img_re_idx] = foreground_B(imgBarray_resize,img_ncol,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
                     else:
                         is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_ncol,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
                 else:
                     if resize:
-                        is_stem_matB[img_re_idx] = foreground_B(imgBarray_resize,img_nrow,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9)
+                        is_stem_matB[img_re_idx] = foreground_B(imgBarray_resize,img_ncol,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9)
                     else:
                         is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_ncol,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9)
                 img_re_idx = img_re_idx + 1
