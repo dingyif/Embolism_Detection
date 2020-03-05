@@ -22,7 +22,7 @@ start_time = datetime.datetime.now()
 '''
 user-specified arguments
 '''
-folder_idx_arg = 3
+folder_idx_arg = 1
 #disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 disk_path = 'E:/Diane/Col/research/code/'
 has_processed = True#Working on Processed data or Unprocessed data
@@ -128,8 +128,8 @@ else:
     else:
         chunk_folder=""#just a placeholder for fx like calc_bubble_area_prop
     
-    img_num = end_img_idx-start_img_idx + 1
-    
+    img_num = end_img_idx-start_img_idx + 1#for initializing img_stack, might be too big if there's th.jpg or preview.png
+    img_num_real = 0
     ignore_num = 0 
     img_re_idx = 0 #relative index for images in start_img_idx to end_img_idx
     for filename in img_paths[(start_img_idx-1):]: #original img: 958 rowsx646 cols
@@ -149,6 +149,7 @@ else:
             if img_array.shape[0]==img_nrow and img_array.shape[1]==img_ncol:
                 img_stack[img_re_idx] = img_array
                 img_re_idx = img_re_idx + 1
+                img_num_real += 1
             else:
                 #to avoid error produced by th.jpg or preview.png
                 #ValueError: could not broadcast input array from shape (768,1024) into shape (1944,2592)
@@ -159,12 +160,14 @@ else:
                 ignore_num += 1
     
     if ignore_num >0:
-        img_num = img_num - ignore_num# so that there won't  be error with add_img_info_to_stack
-        img_stack = img_stack[:img_num,:,:]
-        end_img_idx = end_img_idx - ignore_num; #s.t. no "index out of bounds" for extract_foregroundRGB c5_stem (chunk_idx=6,chunk_size=200) #not sure if this solves for a5.2
+        img_num = img_num_real
+        img_stack = img_stack[:img_num,:,:]# so that there won't  be error with add_img_info_to_stack
+        #end_img_idx = end_img_idx - ignore_num #s.t. no "index out of bounds" for extract_foregroundRGB c5_stem (chunk_idx=6,chunk_size=200) #not sure if this solves for a5.2
+        end_img_idx = img_num +start_img_idx-1#for a5.2 (th.jpg) not sure if it works for others...
     
-        
     print("finish loading img")
+    print("img_num:",img_num)
+    print("end_img_idx:",end_img_idx)
     #############################################################################
     #    Difference between consecutive images
     #    and Clip negative pixel values to 0 
@@ -595,12 +598,12 @@ else:
     final_combined_inv_info = add_img_info_to_stack(final_combined_inv,img_paths,start_img_idx)
         
     if is_save==True:
-        tiff.imsave(chunk_folder+'/combined_4.tif', final_combined_inv_info)
         tiff.imsave(chunk_folder+'/predict.tif',255-final_stack.astype(np.uint8))
         tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
         tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo.tif',255-final_stack_prev_stage.astype(np.uint8))
         tiff.imsave(chunk_folder+'/weak_emb_stack.tif',255-weak_emb_stack.astype(np.uint8))
         #tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo_small.tif',255-before_rm_cc_geo_stack_small.astype(np.uint8))
+        tiff.imsave(chunk_folder+'/combined_4.tif', final_combined_inv_info)
         print("saved tif files")
     
     diff_min_sec=print_used_time(start_time)
