@@ -24,14 +24,14 @@ user-specified arguments
 '''
 folder_idx_arg = 4
 disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-disk_path = 'F:/Diane/Col/research/code/'
+#disk_path = 'E:/Diane/Col/research/code/'
 has_processed = True#Working on Processed data or Unprocessed data
 chunk_idx = 0#starts from 0
 chunk_size = 10#the number of imgs to process at a time #try to be a multiple of window_size(200), or else last stage of rolling window doesn't work well
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
 plot_interm = False
-version_num = 9.85#9.85
+version_num = 9.9#9.85
 #9.9 : rescue_weak_emb_by_dens
 img_width = 600
 img_height = 900
@@ -645,8 +645,7 @@ else:
         tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
         if is_stem == True:
             tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo.tif',255-final_stack_prev_stage.astype(np.uint8))
-            if version_num >= 9.9:
-                tiff.imsave(chunk_folder+'/weak_emb_stack.tif',255-weak_emb_stack.astype(np.uint8))
+            tiff.imsave(chunk_folder+'/weak_emb_stack.tif',255-weak_emb_stack.astype(np.uint8))
             #tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo_small.tif',255-before_rm_cc_geo_stack_small.astype(np.uint8))
         tiff.imsave(chunk_folder+'/combined_4.tif', final_combined_inv_info)
         print("saved tif files")
