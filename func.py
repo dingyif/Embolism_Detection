@@ -146,7 +146,7 @@ def extract_foreground(img_2d, chunk_folder, blur_radius=10.0,fg_threshold=0.1,e
         plt.imsave(chunk_folder + "/m3_is_stem.jpg",is_stem,cmap='gray')
     return(is_stem)#logical 2D array
 
-def extract_foregroundRGB(img_2d,img_re_idx,chunk_folder, blur_radius=10.0,expand_radius_ratio=3,is_save=False):
+def extract_foregroundRGB(img_2d,img_re_idx,chunk_folder, blur_radius=10.0,expand_radius_ratio=3,is_save=False,use_max_area=False):
     '''
     assume stem is more green than backgorund
     '''
@@ -157,18 +157,20 @@ def extract_foregroundRGB(img_2d,img_re_idx,chunk_folder, blur_radius=10.0,expan
     is_stem_mat = (smooth_img > np.mean(img_2d))*1 #why not change it to np.mean(smooth_img), cuz np.mean(img_2d) seems slightly bigger than that of smooth_img?
     
     #plot_gray_img(is_stem_mat)#1(white) for stem part
-    if is_save==True:
-        plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_G_2_1_is_stem_mat_before_max_area.jpg",is_stem_mat,cmap='gray')
+    if use_max_area:
+        if is_save==True:
+            plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_G_2_1_is_stem_mat_before_max_area.jpg",is_stem_mat,cmap='gray')
     
-    
-    num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(is_stem_mat.astype(np.uint8), 8)#8-connectivity
-    
-    if num_cc>1:#more than 1 area, don't count bgd
-        area = stats[1:, cv2.CC_STAT_AREA]
-        max_cc_label = np.where(area==max(area))[0]+1#+1 cuz we exclude 0 in previous line
-        is_stem_mat = (mat_cc==max_cc_label)*1
-    else:#no part is being selected as stem --> treat entire img as stem
-        is_stem_mat = is_stem_mat+1
+        #doesn't work for unproc Alclat3_stem
+        num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(is_stem_mat.astype(np.uint8), 8)#8-connectivity
+        
+        if num_cc>1:#more than 1 area, don't count bgd
+            area = stats[1:, cv2.CC_STAT_AREA]
+            max_cc_label = np.where(area==max(area))[0]+1#+1 cuz we exclude 0 in previous line
+            is_stem_mat = (mat_cc==max_cc_label)*1
+        else:#no part is being selected as stem --> treat entire img as stem
+            is_stem_mat = is_stem_mat+1
+
         
 #    num_cc_stem, mat_cc_stem = cv2.connectedComponents(is_stem_mat.astype(np.uint8))
 #    unique_cc_stem_label = np.unique(mat_cc_stem) 
@@ -203,7 +205,7 @@ def extract_foregroundRGB(img_2d,img_re_idx,chunk_folder, blur_radius=10.0,expan
         plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_G_3_is_stem_matG.jpg",is_stem_mat,cmap='gray')
     return(is_stem_mat)#logical 2D array
 
-def foreground_B(img_2d,img_nrow,img_re_idx,chunk_folder,quan_th=0.9, G_max = 160,blur_radius=10.0,expand_radius_ratio=9,is_save=False):
+def foreground_B(img_2d,img_nrow,img_re_idx,chunk_folder,quan_th=0.9, G_max = 160,blur_radius=10.0,expand_radius_ratio=9,is_save=False,use_max_area=False):
     '''
     assume stem is more blue than bark (i.e. stem is whiter than bark)
     G_max is introduced because of in3_stem
@@ -216,24 +218,22 @@ def foreground_B(img_2d,img_nrow,img_re_idx,chunk_folder,quan_th=0.9, G_max = 16
     is_stem_mat = (smooth_img > min(np.quantile(smooth_img,quan_th),G_max))*1
     
     #plot_gray_img(is_stem_mat)#1(white) for stem part
-    if is_save==True:
-        plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_B_2_1_is_stem_mat_before_max_area.jpg",is_stem_mat,cmap='gray')
-    
-    
-    num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(is_stem_mat.astype(np.uint8), 8)#8-connectivity
-    
-    if num_cc>1:#more than 1 area, don't count bgd
-        area = stats[1:, cv2.CC_STAT_AREA]
-        cc_h = stats[1:,cv2.CC_STAT_HEIGHT]
-        cc_valid_geo = 1*(cc_h>img_nrow/2)#assume stem is at least half as tall as img_nrow
-        #(cas5_stem img_idx>1200)
-        area_valid = area*cc_valid_geo#map invalid one's area to 0
-        max_cc_label = np.where(area_valid==max(area_valid))[0]+1#+1 cuz we exclude 0 in previous line
-        is_stem_mat = (mat_cc==max_cc_label)*1
-    else:#no part is being selected as stem --> treat entire img as stem
-        is_stem_mat = is_stem_mat+1
+    if use_max_area:
+        if is_save==True:
+            plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_B_2_1_is_stem_mat_before_max_area.jpg",is_stem_mat,cmap='gray')
         
-
+        num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(is_stem_mat.astype(np.uint8), 8)#8-connectivity
+        
+        if num_cc>1:#more than 1 area, don't count bgd
+            area = stats[1:, cv2.CC_STAT_AREA]
+            cc_h = stats[1:,cv2.CC_STAT_HEIGHT]
+            cc_valid_geo = 1*(cc_h>img_nrow/2)#assume stem is at least half as tall as img_nrow
+            #(cas5_stem img_idx>1200)
+            area_valid = area*cc_valid_geo#map invalid one's area to 0
+            max_cc_label = np.where(area_valid==max(area_valid))[0]+1#+1 cuz we exclude 0 in previous line
+            is_stem_mat = (mat_cc==max_cc_label)*1
+        else:#no part is being selected as stem --> treat entire img as stem
+            is_stem_mat = is_stem_mat+1
     
     #expand the stem part a bit by shrinking the not_stem
     not_stem = -is_stem_mat+1
