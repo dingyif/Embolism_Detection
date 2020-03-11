@@ -287,7 +287,8 @@ else:
         
         stem_path = os.path.join(img_folder,"input", "stem.jpg")#input img (stem for 1st img)
         if version_num >=10 and not os.path.exists(stem_path):
-            print("no input/stem.jpg")
+            print("error : no input/stem.jpg")
+            sys.exit("Error: no input/stem.jpg")
         elif version_num >= 10 and os.path.exists(stem_path):
             #read-in stem.jpg
             stem_img0=Image.open(stem_path).convert('L') #.convert('L'): gray-scale # 646x958
