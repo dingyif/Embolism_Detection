@@ -38,10 +38,10 @@ disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 #disk_path = 'E:/Diane/Col/research/code/'
 if args.has_proc==1:
     has_processed = True#Working on Processed data or Unprocessed data
-    proc_str = "unprocessed"
+    proc_str = "processed"
 else:
     has_processed = False
-    proc_str = "processed"
+    proc_str = "unprocessed"
 
 chunk_idx = args.chunk_idx#starts from 0
 chunk_size = args.chunk_size#4000#the number of imgs to process at a time
