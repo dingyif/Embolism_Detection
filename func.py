@@ -250,6 +250,29 @@ def foreground_B(img_2d,img_nrow,img_re_idx,chunk_folder,quan_th=0.9, G_max = 16
         plot_gray_img(is_stem_mat)#1(white) for stem part
         plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_B_3_is_stem_matB.jpg",is_stem_mat,cmap='gray')
     return(is_stem_mat)#logical 2D array
+
+def corr_image(im1_gray, im2_gray,plot_interm=False):
+    '''
+    detect a shift using correlation btw 2 consecutive imgs
+    #https://stackoverflow.com/questions/24768222/how-to-detect-a-shift-between-images
+    '''
+    
+    # get rid of the averages, otherwise the results are not good
+    im1_gray -= np.mean(im1_gray)
+    im2_gray -= np.mean(im2_gray)
+   
+    corr_img = scipy.signal.fftconvolve(im1_gray, im2_gray[::-1,::-1], mode='same')
+    # calculate the correlation image; note the flipping of onw of the images
+    if plot_interm==True:
+        plot_gray_img(corr_img)
+    
+    pos_bright = np.unravel_index(np.argmax(corr_img), corr_img.shape)#The brightest spot position
+    
+    ori_center_y = round(im1_gray.shape[0]/2)
+    ori_center_x = round(im1_gray.shape[1]/2)
+    shift_down = ori_center_y - pos_bright[0]
+    shift_right = ori_center_x - pos_bright[1]
+    return shift_down,shift_right
 #############################################################################
 #    main function for detecting embolism
 ############################################################################# 
