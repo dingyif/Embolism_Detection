@@ -371,8 +371,8 @@ else:
         if is_save==True:
             plt.imsave(chunk_folder + "/m_3_is_stem_mat2_0.jpg",is_stem_mat2[0,:,:],cmap='gray')
             plt.imsave(chunk_folder + "/m_3_is_stem_mat2_last.jpg",is_stem_mat2[-1,:,:],cmap='gray')
-            plt.imsave(chunk_folder + "/m_3_stem_and_img_0.jpg",is_stem_mat[0]*img_stack[0],cmap='gray')
-            plt.imsave(chunk_folder + "/m_3_stem_and_img_last.jpg",is_stem_mat[-1]*img_stack[-1],cmap='gray')
+            plt.imsave(chunk_folder + "/m_3_stem_and_img_0.jpg",is_stem_mat2[0]*img_stack[0],cmap='gray')
+            plt.imsave(chunk_folder + "/m_3_stem_and_img_last.jpg",is_stem_mat2[-1]*img_stack[-2],cmap='gray')
         print("finish is_stem_mat2")
         
     
