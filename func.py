@@ -146,7 +146,7 @@ def extract_foreground(img_2d, chunk_folder, blur_radius=10.0,fg_threshold=0.1,e
         plt.imsave(chunk_folder + "/m3_is_stem.jpg",is_stem,cmap='gray')
     return(is_stem)#logical 2D array
 
-def extract_foregroundRGB(img_2d,img_re_idx,chunk_folder, blur_radius=10.0,expand_radius_ratio=3,is_save=False,use_max_area=False):
+def extract_foregroundRGB(img_2d,img_re_idx,chunk_folder, blur_radius=10.0,expand_radius_ratio=3,is_save=False,use_max_area=True):
     '''
     assume stem is more green than backgorund
     '''
@@ -205,7 +205,7 @@ def extract_foregroundRGB(img_2d,img_re_idx,chunk_folder, blur_radius=10.0,expan
         plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_G_3_is_stem_matG.jpg",is_stem_mat,cmap='gray')
     return(is_stem_mat)#logical 2D array
 
-def foreground_B(img_2d,img_nrow,img_re_idx,chunk_folder,quan_th=0.9, G_max = 160,blur_radius=10.0,expand_radius_ratio=9,is_save=False,use_max_area=False):
+def foreground_B(img_2d,img_nrow,img_re_idx,chunk_folder,quan_th=0.9, G_max = 160,blur_radius=10.0,expand_radius_ratio=9,is_save=False,use_max_area=True):
     '''
     assume stem is more blue than bark (i.e. stem is whiter than bark)
     G_max is introduced because of in3_stem

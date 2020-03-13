@@ -9,8 +9,8 @@ import os,shutil#for creating/emptying folders
 import re
 import sys
 from func import plot_gray_img, to_binary,plot_img_sum, plot_overlap_sum
-from func import add_img_info_to_stack, extract_foregroundRGB,foreground_B, remove_cc_by_geo, corr_image
-from func import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set, rescue_weak_emb_by_dens
+from func import add_img_info_to_stack, extract_foregroundRGB,foreground_B,mat_reshape, corr_image
+from func import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set, remove_cc_by_geo, rescue_weak_emb_by_dens
 from func import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
 from func import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric,print_used_time
 from density import density_of_a_rect
@@ -259,8 +259,13 @@ else:
 #        is_stem_mat2 = bigger_than_mean[:-1,:,:]*(is_stem_mat*1)
 #        #drop the last img s.t. size would be the same as diff_stack
 #        #multiply by is_stem_mat to crudely remove the noises (false positive) outside of is_stem_mat2
-          
+        if version_num >= 10:
+            use_max_area = False
+        else:
+            use_max_area = True
+        
         is_stem_matG = np.ones(img_stack.shape)
+        
         img_re_idx = 0
         for filename in img_paths[(start_img_idx-1):end_img_idx]: #original img: 958 rowsx646 cols
             imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
@@ -269,15 +274,15 @@ else:
             #put in the correct data structure
             if img_re_idx==0 and is_save==True:
                 if resize:
-                    is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray_resize,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True)
+                    is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray_resize,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True,use_max_area=use_max_area)
                 else:
-                    is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True)
+                    is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True,use_max_area=use_max_area)
 
             else:
                 if resize:
-                    is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray_resize,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2)
+                    is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray_resize,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,use_max_area=use_max_area)
                 else:
-                    is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2)
+                    is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,use_max_area=use_max_area)
             img_re_idx = img_re_idx + 1
         
         
