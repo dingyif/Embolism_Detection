@@ -266,24 +266,28 @@ else:
         
         is_stem_matG = np.ones(img_stack.shape)
         
-        img_re_idx = 0
-        for filename in img_paths[(start_img_idx-1):end_img_idx]: #original img: 958 rowsx646 cols
-            imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
-            imgGarray = imgRGB_arr[:,:,1] #only look at G layer
-            imgGarray_resize = cv2.resize(imgGarray,(img_width, img_height))
-            #put in the correct data structure
-            if img_re_idx==0 and is_save==True:
-                if resize:
-                    is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray_resize,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True,use_max_area=use_max_area)
+        '''
+        v10.1: Don’t use is_stem_matG at all(inspired by unprocessed/Alclat3_stem,Alclat5_stemDoneBad)
+        '''
+        if version_num < 10.1:
+            img_re_idx = 0
+            for filename in img_paths[(start_img_idx-1):end_img_idx]: #original img: 958 rowsx646 cols
+                imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
+                imgGarray = imgRGB_arr[:,:,1] #only look at G layer
+                imgGarray_resize = cv2.resize(imgGarray,(img_width, img_height))
+                #put in the correct data structure
+                if img_re_idx==0 and is_save==True:
+                    if resize:
+                        is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray_resize,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True,use_max_area=use_max_area)
+                    else:
+                        is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True,use_max_area=use_max_area)
+    
                 else:
-                    is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True,use_max_area=use_max_area)
-
-            else:
-                if resize:
-                    is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray_resize,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,use_max_area=use_max_area)
-                else:
-                    is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,use_max_area=use_max_area)
-            img_re_idx = img_re_idx + 1
+                    if resize:
+                        is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray_resize,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,use_max_area=use_max_area)
+                    else:
+                        is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,use_max_area=use_max_area)
+                img_re_idx = img_re_idx + 1
         
         
         #be more consservative about shifting, else error accumulation...
@@ -295,6 +299,14 @@ else:
             print("error : no input/stem.jpg")
             sys.exit("Error: no input/stem.jpg")
         elif version_num >= 10 and os.path.exists(stem_path):
+            '''
+            v10:
+            use_max_area=False for is_stem_G
+            read in input/stem.jpg as the 1st mask in is_stem_mat_cand (i.e. is_stem_mat_cand[0])
+            use corr_image to detect shift from prev img, then shift accordingly and save into is_stem_mat_cand
+            (v10)the final stem mask is the intersection of is_stem_matG and is_stem_mat_cand
+            (v10.1)the final stem mask is the is_stem_mat_cand
+            '''
             #read-in stem.jpg
             stem_img0=Image.open(stem_path).convert('L') #.convert('L'): gray-scale # 646x958
             stem_arr0 = np.float32(stem_img0)/255 #convert to array and {0,255} --> {0,1}
