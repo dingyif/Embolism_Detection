@@ -267,7 +267,7 @@ else:
         is_stem_matG = np.ones(img_stack.shape)
         
         '''
-        v10.1: Don’t use is_stem_matG at all(inspired by unprocessed/Alclat3_stem,Alclat5_stemDoneBad)
+        v10.1: Don't use is_stem_matG at all(inspired by unprocessed/Alclat3_stem,Alclat5_stemDoneBad) (fp might increase)
         '''
         if version_num < 10.1:
             img_re_idx = 0
@@ -629,6 +629,14 @@ else:
         input_stack = filter_stack*final_stack_prev_stage
         #before_rm_cc_geo_stack_small = mat_reshape(final_stack_prev_stage,round(img_nrow/3),round(img_ncol/3))#reshape to 256x256. can barely see the weak emb?
         final_stack,geo_invalid_emb_set,cleaned_but_not_all_geo_invalid_set,weak_emb_cand_set = remove_cc_by_geo(input_stack,final_stack_prev_stage,has_embolism1,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max,weak_emb_height_min,weak_emb_area_min)
+        if version_num >= 11:
+            '''
+            v11: strong_emb_cand(stc)(combine v10.1 and v9.85 )
+            Save output of v9.85 (weak_emb and small noises discarded) and use it as the input for the stage that separates strong emb. and big noises
+            output: stc_predict.tif.tif, stc_true_positive_index.txt, stc_false_negative_index.txt, stc_false_positive_index.txt
+            '''
+            final_stack_strong_emb_cand = final_stack.copy()
+            
         if version_num >= 9.9:
             weak_emb_stack,has_weak_emb_set = rescue_weak_emb_by_dens(input_stack,final_stack_prev_stage,weak_emb_cand_set,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max,weak_emb_height_min,weak_emb_area_min,cc_dens_min,plot_interm)
             final_stack = final_stack + weak_emb_stack
@@ -692,10 +700,16 @@ else:
             if plot_interm == True:
                 plot_gray_img(final_img,str(img_idx)+"_final_img")
             final_stack[img_idx,:,:] = final_img*255
+        #for both stem and leaf:
         #if the proportion of embolised pixels are smaller than emb_pro_th_min, treat as no emb
         num_emb_each_img_after = np.sum(np.sum(final_stack/255,axis=2),axis=1)
         treat_as_no_emb_idx = np.nonzero(num_emb_each_img_after/(img_nrow*img_ncol)<emb_pro_th_min)[0]
         final_stack[treat_as_no_emb_idx,:,:] = np.zeros(final_stack[treat_as_no_emb_idx,:,:].shape)
+        if version_num >= 11 and is_stem==True:
+            #for final_stack_strong_emb_cand, if the proportion of embolised pixels are smaller than emb_pro_th_min, treat as no emb
+            num_emb_each_img_strong_emb = np.sum(np.sum(final_stack_strong_emb_cand/255,axis=2),axis=1)
+            treat_as_no_emb_idx_strong_emb = np.nonzero(num_emb_each_img_strong_emb/(img_nrow*img_ncol)<emb_pro_th_min)[0]
+            final_stack_strong_emb_cand[treat_as_no_emb_idx_strong_emb,:,:] = np.zeros(final_stack_strong_emb_cand[treat_as_no_emb_idx_strong_emb,:,:].shape)
     
     print("2nd stage done")
     
@@ -724,6 +738,8 @@ else:
         tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
         if is_stem == True:
             tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo.tif',255-final_stack_prev_stage.astype(np.uint8))
+            if version_num >= 11:
+                tiff.imsave(chunk_folder+'/stc_predict.tif',255-final_stack_strong_emb_cand.astype(np.uint8))
             if version_num >= 9.9:
                 tiff.imsave(chunk_folder+'/weak_emb_stack.tif',255-weak_emb_stack.astype(np.uint8))
             #tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo_small.tif',255-before_rm_cc_geo_stack_small.astype(np.uint8))
@@ -771,6 +787,15 @@ else:
             np.savetxt(chunk_folder + '/false_negative_index.txt', con_img_list[2]+(start_img_idx-1),fmt='%i')
             np.savetxt(chunk_folder + '/true_positive_index.txt', con_img_list[3]+(start_img_idx-1),fmt='%i')
             #but there could still be cases where there are false positive pixels in true positive img
+            if version_num >= 11 and is_stem==True:
+                '''
+                v11: save txt files for strong emb candidate(stc)
+                '''
+                has_embolism_stc = img_contain_emb(final_stack_strong_emb_cand)
+                con_img_list_stc = confusion_mat_img(has_embolism_stc,true_has_emb)
+                np.savetxt(chunk_folder + '/stc_false_positive_index.txt', con_img_list_stc[1]+(start_img_idx-1),fmt='%i')#integer format
+                np.savetxt(chunk_folder + '/stc_false_negative_index.txt', con_img_list_stc[2]+(start_img_idx-1),fmt='%i')
+                np.savetxt(chunk_folder + '/stc_true_positive_index.txt', con_img_list_stc[3]+(start_img_idx-1),fmt='%i')
         con_df_px = confusion_mat_pixel(final_stack,true_mask)
         #print(con_df_px)
         total_num_pixel = final_stack.shape[0]*final_stack.shape[1]*final_stack.shape[2]
