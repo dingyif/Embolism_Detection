@@ -1,0 +1,227 @@
+---
+title: "shinyapp plot"
+author: "Dingyi Fang"
+date: "3/12/2020"
+output: html_document
+---
+#loading  required modules
+```{r}
+library(bioimagetools)
+library(dplyr)
+library(Matrix)
+library(plotly)
+```
+#Read Data from TIFF file
+```{r}
+pred_tiff = bioimagetools::readTIF('a2_stem/predict.tif')
+num_imgs <- dim(pred_tiff)[3]
+row_num  <- dim(pred_tiff)[1]
+col_num  <- dim(pred_tiff)[2] 
+```
+#get the idx name
+```{r}
+tp_names <- list.files('Alclat2_stem.DONEGOOD.HANNAH.9.26')
+tp_img_idx <-  c()
+for (name in tp_names) {
+  tp_idx <- as.numeric(unlist(strsplit(name,'.jpg')))
+  #different in python and r
+  tp_idx <- tp_idx + 1
+  tp_img_idx <- c(tp_img_idx,tp_idx)
+}
+#how many tp img in there
+tp_num <- length(tp_img_idx)
+```
+#get the idx name from txt file
+```{r}
+tp_img_idx <- read.csv('a2_stem/true_positive_index.txt',header = FALSE)
+tp_img_idx <- tp_img_idx$V1 + 1
+tp_num <- length(tp_img_idx)
+```
+
+#get the time stamps
+```{r}
+all_files <- list.files('Alclat2_stem.DONEGOOD.HANNAH.9.26', pattern = '.png')
+#%Y%e%d-%H%M%S
+date_time_list = NULL
+#initial the start time 
+for (file in all_files) {
+  time_str = unlist(strsplit(file, split = '.png'))
+  #put all year month day in formate
+  Year = substr(time_str,1,4)
+  Month = substr(time_str,5,6)
+  Day = substr(time_str,7,8)
+  YMD = paste(Year,Month,Day,sep = '-')
+  Hour = substr(time_str,10,11)
+  Minute = substr(time_str,12,13)
+  Secs = substr(time_str,14,15)
+  HMS = paste(Hour,Minute,Secs, sep = ':')
+  date_time = paste(YMD,HMS,sep = ' ')
+  date_time_list = c(date_time_list,date_time)
+}
+#compute the relative time
+date_time_list = date_time_list[1:num_imgs+1]
+start_time = date_time_list[1]
+diff_time_list = NULL
+for (date_time in date_time_list) {
+  diff_time = difftime(date_time,start_time, units = 'mins')
+  diff_time_list = c(diff_time_list, diff_time)
+}
+diff_time_list_int <- floor(diff_time_list)
+#put in the data frame to show table in R shiny.
+number_emb = seq(1,tp_num)
+embolism_time <- date_time_list[tp_img_idx]
+diff_time_list_tp <- diff_time_list_int[tp_img_idx]
+embolism_table <-  data.frame(embolism_time,diff_time_list_tp,number_emb)
+colnames(embolism_table) <- c('embolism_time','time_since_start(mins)','number_emb')
+```
+#data to feed image
+```{r}
+sum_tiff <- array(rep(0,row_num*col_num),dim = c(row_num,col_num))
+plot_tiff <- array(rep(0, row_num*col_num*tp_num), dim=c(row_num, col_num, tp_num))
+i = 1
+for (number in tp_img_idx) {
+  sum_tiff <- sum_tiff + pred_tiff[,,number]
+  sum_tiff <- abs(sum_tiff -1)
+  #make the mat sparse to easy plot
+  plot_tiff[,,i] <- sum_tiff
+  i = i+1
+}
+#x <- which(sparse_mat!= 0, arr.ind= T)[,'row']
+```
+#Prepare data for plotly
+```{r}
+#column data for X and row data for Y
+num = 1
+plot_mat_all <- data.frame()
+for (j in tp_img_idx) {
+ plot_mat_j <- which(abs(pred_tiff[,,j]-1)!=0 , arr.ind = T)
+ plot_mat_j <- data.frame(plot_mat_j)
+ plot_mat_j$Z <- num
+ plot_mat_all <- rbind(plot_mat_all,plot_mat_j)
+ num <- num+ 1
+}
+```
+#Try hexbin plot
+```{r}
+library(ggplot2) #load ggplot2 package
+# define the data inputs to ggplot
+ ggplot(plot_mat_all[,,125], aes(x=col,y=row, xmin=0, xmax=col_num+50, ymin=0, ymax=row_num+50)) +
+# define the color of the outline of the hexagons with color=c()
+ # using c(#"809FFF") allows for the usage of hexadecimal color codes
+ stat_binhex(bins=100, color=c("#D7DADB")) +
+# set the graph theme to classic, provides a white background and no grid lines
+ # Change font size to 18 by using base_size = 18
+ theme_classic(base_size=10) +
+# Apply lables to the graph for x and y
+ labs(x = "Row", y = "Height", colour = "Cylinders")+
+# change the gradient fill to range from grey to Red
+ scale_fill_gradient(low = "blue", high = "red")
+```
+
+```{r}
+load('a2_stem_shinydata.RData')
+css <- "#table{
+  background: yellow;
+  font-size: 12px;
+}"
+```
+
+#R shiny App
+```{r}
+library(shiny)
+library(plotly)
+library(DT)
+library(bioimagetools)
+library(EBImage)
+library(ggplot2)
+library(Matrix)
+library(dplyr)
+# Define UI for application 
+ui <- fluidPage(#theme = shinytheme("cosmo"),
+  tags$style(css),
+  # Application title
+    titlePanel("Embolism Along Time"),
+    # Sidebar with a slider input for number of bins 
+    sidebarLayout(
+        position = "left",
+        sidebarPanel(
+          helpText(paste("The time starts at: ", date_time_list[1])),
+            #textInput('title','Title','Embolism Sequence'),
+            sliderInput('time','Time since start (Hour)', min = diff_time_list_int[1]/60, 
+                        max = floor(tail(diff_time_list_int, n = 1)/60), 
+                        value = diff_time_list_int[100]/60, 
+                        animate = TRUE, step = 1),
+            numericInput(inputId = 'number',label = 'Points Number in Scatterplot',value = 20000, 
+                         min = 20000, max = 60000,step = 1000),
+        selectInput("plot_name", "Select the Plot",
+                  choices = c("Image","Plotly","Hexagonal"),
+                  selected = "Image")
+        ),
+        # Show a plot of the generated distribution
+        mainPanel(
+            textOutput("folder_name"),
+            conditionalPanel(condition = "input.plot_name != 'Plotly'", plotOutput("plot")),
+            conditionalPanel(condition = "input.plot_name == 'Plotly'",plotlyOutput("plotly")),
+            tabsetPanel(
+            tabPanel("Data",DT::dataTableOutput("table")))
+                )
+                ),
+    #place a download button
+  downloadButton('downloadData',label = "Download")
+                )
+#Define the serve for application
+server <- function(input, output) {
+  #to put in reactive in select name in future
+  output$folder_name <- renderText({"Alclat2_stem"})
+  #prepare for embolism list
+  emb_num_list <- reactive({embolism_table[(input$time*60-embolism_table$`time_since_start(mins)`)>0,"number_emb"]})
+  plotly_data <- reactive({plot_mat_all[which(plot_mat_all$Z %in% emb_num_list()),]})
+  #reduce the data if its too large
+  large_data <- reactive({if(nrow(plotly_data()) > input$number) {return(TRUE)} else{return(FALSE)}})
+  reduce_data <- reactive({if(large_data() == TRUE){ return(sample_frac(plotly_data(), size = input$number/nrow(plotly_data())))}})
+  #create plot for Image and Hexagonal
+  output$plot <- renderPlot({
+    if (input$plot_name == 'Image'){
+    if (length(emb_num_list()) != 0) {
+      number <- tail(emb_num_list(),n = 1)
+      plot_image<- (Matrix(abs(plot_tiff[,,number]),sparse = TRUE)) 
+      image(plot_image)}}
+    # High Density Scatterplot with Binning
+    else if(input$plot_name == 'Hexagonal'){
+      if(large_data() ==FALSE){
+      ggplot(plotly_data()) + aes(x = col,y = row, xmin=0, xmax=col_num + 50, ymin=0, ymax=row_num + 50)+
+          # using c(#"809FFF") allows for the usage of hexadecimal color codes
+          stat_binhex(bins=50, color=c("#D7DADB")) +
+       # Change font size to 10 lab with width and Height
+      theme_classic(base_size=10) +labs(x = "Width", y = "Height")+ scale_fill_gradient("Times in the hexagon")}
+    else{
+      ggplot(reduce_data()) + aes(x = col,y = row, xmin=0, xmax=col_num + 50, ymin=0, ymax=row_num + 50)+
+          # using c(#"809FFF") allows for the usage of hexadecimal color codes
+          stat_binhex(bins=50, color=c("#D7DADB")) +
+       # Change font size to 10 lab with width and Height
+      theme_classic(base_size=10) +labs(x = "Width", y = "Height")+ scale_fill_gradient("Times in the hexagon") }}
+    })
+  output$plotly <- renderPlotly({
+    if (input$plot_name == 'Plotly'){
+    x_a <- list(range = c(0,col_num + 50))
+    y_a <-list(range = c(0,row_num + 50))
+    if(large_data() ==FALSE){
+    plot_ly(plotly_data(), x = ~ col ,y = ~ row,type = "scatter", hoverinfo = "text",text = ~paste(Z, "emb"),marker = list(size = 1, opacity = 0.8, color = ~ Z, colorbar=list(title='Seq of Appear'),colorscale = "Picnic",reversescale =T)) %>% layout(xaxis = x_a, yaxis = y_a )}
+    else {
+    plot_ly(reduce_data(), x = ~ col ,y = ~ row,type = "scatter", hovertext = ~ Z, marker = list(size = 1, opacity = 0.8, color = ~ Z, colorbar=list(title='Seq of Appear'),colorscale = "Picnic",reversescale =T)) %>% layout(xaxis = x_a, yaxis = y_a )
+    } 
+}})
+                  
+  output$table <- DT::renderDataTable({
+        #select the data
+        if (length(emb_num_list()) != 0) {embolism_table[which(embolism_table$number_emb %in% emb_num_list()),]}})
+  output$downloadData <- downloadHandler(filename = function(){paste("Embolism-",tail(emb_num_list(),n = 1) ,".csv",sep = "")}, content = function(file){write.csv(plotly_data,file)})
+}
+
+# Run the application 
+shinyApp(ui = ui, server = server)
+```
+
+
+
+
