@@ -471,7 +471,7 @@ def find_emoblism_by_contour(bin_stack,img_idx,stem_area,final_area_th = 20000/2
                 plot_gray_img(final_img,str(img_idx)+"_final_img")
             return(final_img*255)
             
-def find_emoblism_by_filter_contour(bin_stack,filter_stack,img_idx,stem_area,final_area_th = 20000/255,area_th=30, area_th2=30,ratio_th=5,c1_sz=25,d1_sz=10,e2_sz=3,o2_sz=1,cl2_sz=3,plot_interm=False,max_emb_prop=0.05,density_th=0.4,num_px_th=50):
+def find_emoblism_by_filter_contour(bin_stack,filter_stack,img_idx,stem_area,final_area_th = 20000/255,area_th=30, area_th2=30,ratio_th=5,c1_sz=25,d1_sz=10,e2_sz=3,o2_sz=1,cl2_sz=3,plot_interm=False,max_emb_prop=0.05,density_th=0.4,num_px_th=50,resize=False):
     ############# step 1: connect the embolism parts in the mask (more false positive) ############# 
     #    opening(2*2) and closing(5*5)[closing_e] 
     #    --> keep contours with area>area_th and fill in the contour by polygons [contour_mask]
@@ -483,15 +483,20 @@ def find_emoblism_by_filter_contour(bin_stack,filter_stack,img_idx,stem_area,fin
 #        plot_gray_img(filter_img,str(img_idx)+"_filter_img")
 #    
 #    contours, _ = cv2.findContours(filter_img.astype(np.uint8),cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE) 
-    
-    kernel = np.ones((2,2),np.uint8) #square image kernel used for erosion
+    if resize:
+        kernel = np.ones((3,3),np.uint8)#[Dingyi]
+    else:
+        kernel = np.ones((2,2),np.uint8) #square image kernel used for erosion
     #erosion = cv2.erode(bin_stack[img_idx,:,:].astype(np.uint8), kernel,iterations = 1) #refines all edges in the binary image
     opening1 = cv2.morphologyEx(filter_img.astype(np.uint8), cv2.MORPH_OPEN, kernel)
     if plot_interm == True:
         #plot_gray_img(erosion,str(img_idx)+"_erosion")
         plot_gray_img(opening1,str(img_idx)+"_opening1")
     
-    kernel_cl = np.ones((5,5),np.uint8)
+    if resize:
+        kernel_cl = np.ones((4,4),np.uint8)
+    else:
+        kernel_cl = np.ones((5,5),np.uint8)
     #closing_e = cv2.morphologyEx(erosion, cv2.MORPH_CLOSE, kernel_cl)
     closing_e = cv2.morphologyEx(opening1, cv2.MORPH_CLOSE, kernel_cl)
     #using a larger kernel (kernel_cl to connect the embolism part)
@@ -1257,6 +1262,8 @@ def rescue_weak_emb_by_dens(input_stack,final_stack_prev_stage,weak_emb_cand_set
             for cc_idx in (weak_emb_labels+1):
                 cc_mask = 1*(mat_cc==cc_idx)
                 cc_dens = np.sum(cc_mask*smooth_img)/cc_area[cc_idx-1]
+                #cc_dens is larger than 1 because smooth_img comes from input_stack = filter_stack*final_stack_prev_stage
+                # and filter_stack comes from th_stack, which can be up to 255. Also, final_stack_prev_stage is either 0 or 255.
                 if plot_interm==True:
                     print(cc_dens)#1995/420/807/1253
 #                    print(cc_idx)#3/2/2/1
