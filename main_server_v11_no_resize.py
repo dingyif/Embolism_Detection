@@ -9,8 +9,8 @@ import os,shutil#for creating/emptying folders
 import re
 import sys
 from func import plot_gray_img, to_binary,plot_img_sum, plot_overlap_sum
-from func import add_img_info_to_stack, extract_foregroundRGB,foreground_B, remove_cc_by_geo
-from func import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set, rescue_weak_emb_by_dens
+from func import add_img_info_to_stack, extract_foregroundRGB,foreground_B,mat_reshape, corr_image
+from func import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set, remove_cc_by_geo, rescue_weak_emb_by_dens
 from func import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
 from func import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric,print_used_time
 from density import density_of_a_rect
@@ -18,6 +18,7 @@ from detect_by_filter_fx import median_filter_stack
 import math
 import datetime
 start_time = datetime.datetime.now()
+
 '''
 for server
 '''
@@ -37,8 +38,10 @@ disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 #disk_path = 'E:/Diane/Col/research/code/'
 if args.has_proc==1:
     has_processed = True#Working on Processed data or Unprocessed data
+    proc_str = "processed"
 else:
     has_processed = False
+    proc_str = "unprocessed"
 
 chunk_idx = args.chunk_idx#starts from 0
 chunk_size = args.chunk_size#4000#the number of imgs to process at a time
@@ -46,7 +49,9 @@ chunk_size = args.chunk_size#4000#the number of imgs to process at a time
 is_save = True
 plot_interm = False
 version_num = args.version#9.7
-
+img_width = 600
+img_height = 900
+resize = False
 folder_list = []
 has_tif = []
 no_tif =[]
@@ -132,7 +137,7 @@ else:
     if is_save==True:
         #create a "folder" for saving resulting tif files such that next time when re-run this program,
         #the resulting tif file won't be viewed as the most recent modified tiff file
-        chunk_folder = os.path.join(disk_path,'server_output','v'+str(version_num),img_folder_name,'v'+str(version_num)+'_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
+        chunk_folder = os.path.join(disk_path,'server_output','v'+str(version_num)+"_"+proc_str,img_folder_name,'v'+str(version_num)+'_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
         if not os.path.exists(chunk_folder):#create new folder if not existed
             os.makedirs(chunk_folder)
         else:#empty the existing folder
@@ -151,26 +156,44 @@ else:
             if img_re_idx%100==0:#for debugging on server
                 print("img_re_idx:",img_re_idx)
             img=Image.open(filename).convert('L') #.convert('L'): gray-scale # 646x958
-            img_array=np.float32(img) #convert from Image object to numpy array (black 0-255 white); 958x646
+            img_array = np.float32(img) #convert from Image object to numpy array (black 0-255 white); 958x646
+            img_array_resize = cv2.resize(img_array,(img_width,img_height))
             #put in the correct data structure
             if img_re_idx == 0:
-                img_nrow = img_array.shape[0]
-                img_ncol = img_array.shape[1]
+                if resize:
+                    img_nrow = img_array_resize.shape[0]
+                    img_ncol = img_array_resize.shape[1]
+                else:
+                    img_nrow = img_array.shape[0]
+                    img_ncol = img_array.shape[1]
                 img_stack = np.ndarray((img_num,img_nrow,img_ncol), dtype=np.float32)
                 print("img size:",img_nrow," x ", img_ncol)
             
-            if img_array.shape[0]==img_nrow and img_array.shape[1]==img_ncol:
-                img_stack[img_re_idx] = img_array
-                img_re_idx = img_re_idx + 1
-                img_num_real += 1
+            if resize:
+                if img_array_resize.shape[0]==img_nrow and img_array_resize.shape[1]==img_ncol:
+                    img_stack[img_re_idx] = img_array_resize
+                    img_re_idx = img_re_idx + 1
+                    img_num_real += 1
+                else:
+                    #to avoid error produced by th.jpg or preview.png
+                    #ValueError: could not broadcast input array from shape (768,1024) into shape (1944,2592)
+                    #ex: in ImagesNotYetProcessed\dacexc2.2_stem or Processed/a5.2_stem
+                    print("Different img size",filename)
+                    img_paths.remove(filename)#remove from the list -->won't cause problem in extract_foregroundRGB, add_img_info_to_stack
+                    ignore_num += 1
             else:
-                #to avoid error produced by th.jpg or preview.png
-                #ValueError: could not broadcast input array from shape (768,1024) into shape (1944,2592)
-                #ex: in ImagesNotYetProcessed\dacexc2.2_stem
-                #(I manually deleted Processed/ALCLAT5.2_Stem/tl_0002_0001_20190726_103828.jpg.t0002.th.jpg)
-                print("Different img size",filename)
-                img_paths.remove(filename)#remove from the list -->won't cause problem in extract_foregroundRGB, add_img_info_to_stack
-                ignore_num += 1
+                if img_array.shape[0]==img_nrow and img_array.shape[1]==img_ncol:
+                    img_stack[img_re_idx] = img_array
+                    img_re_idx = img_re_idx + 1
+                    img_num_real += 1
+                else:
+                    #to avoid error produced by th.jpg or preview.png
+                    #ValueError: could not broadcast input array from shape (768,1024) into shape (1944,2592)
+                    #ex: in ImagesNotYetProcessed\dacexc2.2_stem or Processed/a5.2_stem
+                    print("Different img size",filename)
+                    img_paths.remove(filename)#remove from the list -->won't cause problem in extract_foregroundRGB, add_img_info_to_stack
+                    ignore_num += 1
+            
     
     if ignore_num >0:
         img_num = img_num_real
@@ -208,7 +231,7 @@ else:
     '''
     Foreground Background Segmentation
     for stem only, cuz there are clearly parts that are background (not stem)
-    want to avoid  artifacts from shrinking of gels/ moving of plastic cover
+    want to avoid artifacts from shrinking of gels/ moving of plastic cover
     mask only the stem part to reduce false positive
     '''
     if is_stem==True:
@@ -236,54 +259,137 @@ else:
 #        is_stem_mat2 = bigger_than_mean[:-1,:,:]*(is_stem_mat*1)
 #        #drop the last img s.t. size would be the same as diff_stack
 #        #multiply by is_stem_mat to crudely remove the noises (false positive) outside of is_stem_mat2
-        is_stem_matG = np.ones(img_stack.shape)
-        img_re_idx = 0
-        for filename in img_paths[(start_img_idx-1):end_img_idx]: #original img: 958 rowsx646 cols
-            imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
-            imgGarray=imgRGB_arr[:,:,1] #only look at G layer
-            #put in the correct data structure
-            if img_re_idx==0 and is_save==True:
-                is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True)
-            else:
-                is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2)
-            img_re_idx = img_re_idx + 1
-        '''
-        v9.7: to separate bark and stem (both very green --> is_stem_mat)
-        assume stem is whiter(larger B value)
-        '''
-
-        quan_th = 0.8
-        #quan_th=0.9 --> too strong for cas2.2_Stem --> is_stem_matB_before_max_area becomes not connected
-        #quan_th: 0.9 --> 0.8 and expand_radius_ratio=9 --> 8
-        is_stem_matB = np.ones(img_stack.shape)
-        img_re_idx = 0
-        if is_flip==False:
-            for filename in img_paths[(start_img_idx-1):end_img_idx]: 
-                imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
-                imgBarray=imgRGB_arr[:,:,2] #only look at B layer
-                #put in the correct data structure
-                if img_re_idx==0 and is_save==True:
-                    #v9.85: add img_nrow to foreground_B
-                    is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_nrow,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
-                else:
-                    is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_nrow,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9)
-                img_re_idx = img_re_idx + 1
+        if version_num >= 10:
+            use_max_area = False
         else:
-            for filename in img_paths[(start_img_idx-1):end_img_idx]: 
+            use_max_area = True
+        
+        is_stem_matG = np.ones(img_stack.shape)
+        
+        '''
+        v10.1: Don't use is_stem_matG at all(inspired by unprocessed/Alclat3_stem,Alclat5_stemDoneBad) (fp might increase)
+        '''
+        if version_num < 10.1:
+            img_re_idx = 0
+            for filename in img_paths[(start_img_idx-1):end_img_idx]: #original img: 958 rowsx646 cols
                 imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
-                imgBarray=imgRGB_arr[:,:,2] #only look at B layer
+                imgGarray = imgRGB_arr[:,:,1] #only look at G layer
+                imgGarray_resize = cv2.resize(imgGarray,(img_width, img_height))
                 #put in the correct data structure
                 if img_re_idx==0 and is_save==True:
-                    is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_ncol,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
+                    if resize:
+                        is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray_resize,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True,use_max_area=use_max_area)
+                    else:
+                        is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=True,use_max_area=use_max_area)
+    
                 else:
-                    is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_ncol,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9)
+                    if resize:
+                        is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray_resize,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,use_max_area=use_max_area)
+                    else:
+                        is_stem_matG[img_re_idx] = extract_foregroundRGB(imgGarray,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,use_max_area=use_max_area)
                 img_re_idx = img_re_idx + 1
-        is_stem_mat = is_stem_matG*is_stem_matB
+        
+        
+        #be more consservative about shifting, else error accumulation...
+        shift_px_min = 0
+        shift_ratio = 0.95
+        
+        stem_path = os.path.join(img_folder,"input", "stem.jpg")#input img (stem for 1st img)
+        if version_num >=10 and not os.path.exists(stem_path):
+            print("error : no input/stem.jpg")
+            sys.exit("Error: no input/stem.jpg")
+        elif version_num >= 10 and os.path.exists(stem_path):
+            '''
+            v10:
+            use_max_area=False for is_stem_G
+            read in input/stem.jpg as the 1st mask in is_stem_mat_cand (i.e. is_stem_mat_cand[0])
+            use corr_image to detect shift from prev img, then shift accordingly and save into is_stem_mat_cand
+            (v10)the final stem mask is the intersection of is_stem_matG and is_stem_mat_cand
+            (v10.1)the final stem mask is the is_stem_mat_cand
+            '''
+            #read-in stem.jpg
+            stem_img0=Image.open(stem_path).convert('L') #.convert('L'): gray-scale # 646x958
+            stem_arr0 = np.float32(stem_img0)/255 #convert to array and {0,255} --> {0,1}
+            
+            is_stem_mat_cand = np.zeros(img_stack.shape)#initialize by 0's (easier for padding left, right)
+            is_stem_mat_cand[0,:,:] = stem_arr0#initialize 1st img's stem by stem.jpg
+            for img_re_idx in range(1, img_stack.shape[0]):#1 cuz will look at (img_re_idx-1,img_re_idx) at once
+                shift_down,shift_right = corr_image(img_stack[img_re_idx-1,:,:], img_stack[img_re_idx,:,:])
+                if abs(shift_down) >= shift_px_min:
+                    pad_row = int(abs(shift_down*shift_ratio))
+                    pad_before_row = max(pad_row,0)#>0: down
+                    pad_after_row = max(-pad_row,0)#>0: up
+                else:
+                    pad_row = 0
+                    pad_before_row=0
+                    pad_after_row=0
+                if abs(shift_right) >= shift_px_min:
+                    pad_col = int(abs(shift_right*shift_ratio))
+                    pad_before_col = max(pad_col,0)#>0: right
+                    pad_after_col = max(-pad_col,0)#>0: left
+                else:
+                    pad_col = 0
+                    pad_before_col=0
+                    pad_after_col=0
+                is_stem_mat_pad = np.pad(is_stem_mat_cand[img_re_idx-1,:,:], ((pad_before_row*2, pad_after_row*2), (pad_before_col*2, pad_after_col*2)), 'edge')
+                is_stem_mat_cand[img_re_idx,:,:]=is_stem_mat_pad[pad_row:img_nrow+pad_row,pad_col:img_ncol+pad_col]
+            
+            is_stem_mat = is_stem_matG*is_stem_mat_cand
+        else:#version_num<10
+            '''
+            v9.7: to separate bark and stem (both very green --> is_stem_mat)
+            assume stem is whiter(larger B value)
+            '''
+    
+            quan_th = 0.8
+            #quan_th=0.9 --> too strong for cas2.2_Stem --> is_stem_matB_before_max_area becomes not connected
+            #quan_th: 0.9 --> 0.8 and expand_radius_ratio=9 --> 8
+            is_stem_matB = np.ones(img_stack.shape)
+            img_re_idx = 0
+            if is_flip==False:
+                for filename in img_paths[(start_img_idx-1):end_img_idx]:
+                    imgRGB_arr = np.float32(Image.open(filename))#RGB image to numpy array
+                    imgBarray = imgRGB_arr[:,:,2] #only look at B layer
+                    imgBarray_resize = cv2.resize(imgBarray,(img_width, img_height))
+                    #put in the correct data structure
+                    if img_re_idx==0 and is_save==True:
+                        #v9.85: add img_nrow to foreground_B
+                        if resize:
+                            is_stem_matB[img_re_idx] = foreground_B(imgBarray_resize,img_nrow,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
+                        else:
+                            is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_nrow,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
+                    else:
+                        if resize:
+                            is_stem_matB[img_re_idx] = foreground_B(imgBarray_resize,img_nrow,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9)
+                        else:
+                            is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_nrow,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9)
+                    img_re_idx = img_re_idx + 1
+            else:
+                for filename in img_paths[(start_img_idx-1):end_img_idx]: 
+                    imgRGB_arr=np.float32(Image.open(filename))#RGB image to numpy array
+                    imgBarray=imgRGB_arr[:,:,2] #only look at B layer
+                    imgBarray_resize = cv2.resize(imgBarray,(img_width, img_height))
+                    #put in the correct data structure
+                    if img_re_idx==0 and is_save==True:
+                        if resize:
+                            is_stem_matB[img_re_idx] = foreground_B(imgBarray_resize,img_ncol,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
+                        else:
+                            is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_ncol,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9,is_save=True)
+                    else:
+                        if resize:
+                            is_stem_matB[img_re_idx] = foreground_B(imgBarray_resize,img_ncol,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9)
+                        else:
+                            is_stem_matB[img_re_idx] = foreground_B(imgBarray,img_ncol,img_re_idx, chunk_folder,quan_th=quan_th,G_max = 160, blur_radius=10.0,expand_radius_ratio=9)
+                    img_re_idx = img_re_idx + 1
+            is_stem_mat = is_stem_matG*is_stem_matB
 
-        if is_save==True:
-            plt.imsave(chunk_folder + "/m_3_is_stem_mat0.jpg",is_stem_mat[0,:,:],cmap='gray')
-            plt.imsave(chunk_folder + "/m_3_is_stem_mat9.jpg",is_stem_mat[9,:,:],cmap='gray')
+        
         is_stem_mat2 = is_stem_mat[:-1,:,:]#drop the last img s.t. size would be the same as diff_stack
+        if is_save==True:
+            plt.imsave(chunk_folder + "/m_3_is_stem_mat2_0.jpg",is_stem_mat2[0,:,:],cmap='gray')
+            plt.imsave(chunk_folder + "/m_3_is_stem_mat2_last.jpg",is_stem_mat2[-1,:,:],cmap='gray')
+            plt.imsave(chunk_folder + "/m_3_stem_and_img_0.jpg",is_stem_mat2[0]*img_stack[0],cmap='gray')
+            plt.imsave(chunk_folder + "/m_3_stem_and_img_last.jpg",is_stem_mat2[-1]*img_stack[-2],cmap='gray')
         print("finish is_stem_mat2")
         
     
@@ -392,6 +498,8 @@ else:
                 #could introduce more false positive cuz in the stage "Don't count as embolism if it keeps appearing (probably is plastic cover)"
                 #the not_emb_mask would become smaller 
                 stem_area = np.sum(is_stem_mat2[img_idx,:,:])
+                if stem_area==0:
+                    print(img_idx," : stem_area=0")
                 final_stack1[img_idx,:,:] = find_emoblism_by_filter_contour(bin_stem_stack,filter_stack,img_idx,stem_area = stem_area,final_area_th = final_area_th,
                                                             area_th=area_th, area_th2=area_th2,ratio_th=ratio_th,e2_sz=1,o2_sz=2,cl2_sz=2,c1_sz=c1_sz,d1_sz=d1_sz,
                                                             plot_interm=plot_interm,max_emb_prop=max_emb_prop,density_th=density_th,num_px_th=num_px_th)
@@ -521,6 +629,14 @@ else:
         input_stack = filter_stack*final_stack_prev_stage
         #before_rm_cc_geo_stack_small = mat_reshape(final_stack_prev_stage,round(img_nrow/3),round(img_ncol/3))#reshape to 256x256. can barely see the weak emb?
         final_stack,geo_invalid_emb_set,cleaned_but_not_all_geo_invalid_set,weak_emb_cand_set = remove_cc_by_geo(input_stack,final_stack_prev_stage,has_embolism1,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max,weak_emb_height_min,weak_emb_area_min)
+        if version_num >= 11:
+            '''
+            v11: strong_emb_cand(stc)(combine v10.1 and v9.85 )
+            Save output of v9.85 (weak_emb and small noises discarded) and use it as the input for the stage that separates strong emb. and big noises
+            output: stc_predict.tif.tif, stc_true_positive_index.txt, stc_false_negative_index.txt, stc_false_positive_index.txt
+            '''
+            final_stack_strong_emb_cand = final_stack.copy()
+            
         if version_num >= 9.9:
             weak_emb_stack,has_weak_emb_set = rescue_weak_emb_by_dens(input_stack,final_stack_prev_stage,weak_emb_cand_set,blur_radius,cc_height_min,cc_area_min,cc_area_max,cc_width_min,cc_width_max,weak_emb_height_min,weak_emb_area_min,cc_dens_min,plot_interm)
             final_stack = final_stack + weak_emb_stack
@@ -541,7 +657,6 @@ else:
         #density based segmentation
         density_seg_idx = np.nonzero(num_emb_each_img/(img_nrow*img_ncol)>emb_pro_th)#images index that'll be performed density based segmentation on#TODO: tune this
         for img_idx in density_seg_idx[0]:
-                
             density_img = density_of_a_rect(bin_stem_stack[img_idx,:,:],dens_rect_window_width)
             density_img_th = density_img>dens_img_th #thresholding
             if plot_interm == True:
@@ -585,10 +700,16 @@ else:
             if plot_interm == True:
                 plot_gray_img(final_img,str(img_idx)+"_final_img")
             final_stack[img_idx,:,:] = final_img*255
+        #for both stem and leaf:
         #if the proportion of embolised pixels are smaller than emb_pro_th_min, treat as no emb
         num_emb_each_img_after = np.sum(np.sum(final_stack/255,axis=2),axis=1)
         treat_as_no_emb_idx = np.nonzero(num_emb_each_img_after/(img_nrow*img_ncol)<emb_pro_th_min)[0]
         final_stack[treat_as_no_emb_idx,:,:] = np.zeros(final_stack[treat_as_no_emb_idx,:,:].shape)
+        if version_num >= 11 and is_stem==True:
+            #for final_stack_strong_emb_cand, if the proportion of embolised pixels are smaller than emb_pro_th_min, treat as no emb
+            num_emb_each_img_strong_emb = np.sum(np.sum(final_stack_strong_emb_cand/255,axis=2),axis=1)
+            treat_as_no_emb_idx_strong_emb = np.nonzero(num_emb_each_img_strong_emb/(img_nrow*img_ncol)<emb_pro_th_min)[0]
+            final_stack_strong_emb_cand[treat_as_no_emb_idx_strong_emb,:,:] = np.zeros(final_stack_strong_emb_cand[treat_as_no_emb_idx_strong_emb,:,:].shape)
     
     print("2nd stage done")
     
@@ -601,6 +722,8 @@ else:
         tm_start_img_idx = chunk_idx*(chunk_size-1)
         tm_end_img_idx = tm_start_img_idx+chunk_size-1
         true_mask = true_mask[tm_start_img_idx:tm_end_img_idx,:,:]
+        if resize:
+        	true_mask = mat_reshape(true_mask, height = img_height, width = img_width)
         combined_list = (true_mask,final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
     else:
         combined_list = (final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
@@ -613,10 +736,15 @@ else:
     if is_save==True:
         tiff.imsave(chunk_folder+'/predict.tif',255-final_stack.astype(np.uint8))
         tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
-        tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo.tif',255-final_stack_prev_stage.astype(np.uint8))
-        tiff.imsave(chunk_folder+'/weak_emb_stack.tif',255-weak_emb_stack.astype(np.uint8))
-        #tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo_small.tif',255-before_rm_cc_geo_stack_small.astype(np.uint8))
+        if is_stem == True:
+            tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo.tif',255-final_stack_prev_stage.astype(np.uint8))
+            if version_num >= 11:
+                tiff.imsave(chunk_folder+'/stc_predict.tif',255-final_stack_strong_emb_cand.astype(np.uint8))
+            if version_num >= 9.9:
+                tiff.imsave(chunk_folder+'/weak_emb_stack.tif',255-weak_emb_stack.astype(np.uint8))
+            #tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo_small.tif',255-before_rm_cc_geo_stack_small.astype(np.uint8))
         tiff.imsave(chunk_folder+'/combined_4.tif', final_combined_inv_info)
+        print("saved tif files")
     
     diff_min_sec=print_used_time(start_time)
     has_embolism = img_contain_emb(final_stack)
@@ -659,6 +787,15 @@ else:
             np.savetxt(chunk_folder + '/false_negative_index.txt', con_img_list[2]+(start_img_idx-1),fmt='%i')
             np.savetxt(chunk_folder + '/true_positive_index.txt', con_img_list[3]+(start_img_idx-1),fmt='%i')
             #but there could still be cases where there are false positive pixels in true positive img
+            if version_num >= 11 and is_stem==True:
+                '''
+                v11: save txt files for strong emb candidate(stc)
+                '''
+                has_embolism_stc = img_contain_emb(final_stack_strong_emb_cand)
+                con_img_list_stc = confusion_mat_img(has_embolism_stc,true_has_emb)
+                np.savetxt(chunk_folder + '/stc_false_positive_index.txt', con_img_list_stc[1]+(start_img_idx-1),fmt='%i')#integer format
+                np.savetxt(chunk_folder + '/stc_false_negative_index.txt', con_img_list_stc[2]+(start_img_idx-1),fmt='%i')
+                np.savetxt(chunk_folder + '/stc_true_positive_index.txt', con_img_list_stc[3]+(start_img_idx-1),fmt='%i')
         con_df_px = confusion_mat_pixel(final_stack,true_mask)
         #print(con_df_px)
         total_num_pixel = final_stack.shape[0]*final_stack.shape[1]*final_stack.shape[2]
@@ -671,17 +808,18 @@ else:
         metrix_cluster = calc_metric(con_df_cluster)
         
         #make sure fn are in weak_emb_cand_set
-        weak_emb_cand_arr = np.asarray(weak_emb_cand_set)#list to array
-        fn_in_weak_cand_vec = np.isin(weak_emb_cand_set,con_img_list[2])
-        fn_in_weak_cand_idx = weak_emb_cand_arr[fn_in_weak_cand_vec]
+        if is_stem:
+            weak_emb_cand_arr = np.asarray(weak_emb_cand_set)#list to array
+            fn_in_weak_cand_vec = np.isin(weak_emb_cand_set,con_img_list[2])
+            fn_in_weak_cand_idx = weak_emb_cand_arr[fn_in_weak_cand_vec]
         
-        if version_num >= 9.9:
+        if version_num >= 9.9 and is_stem:
             #after rescue_weak_emb_by_dens, how many fn are being rescued to tp?
             has_weak_emb_arr = np.asarray(has_weak_emb_set)#list to array
             tp_in_has_weak_emb_vec = np.isin(has_weak_emb_arr,con_img_list[3])
             tp_in_has_weak_emb_idx = has_weak_emb_arr[tp_in_has_weak_emb_vec]
         
-            
+
         if is_stem==True:
             true_emb_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,np.where(true_has_emb)[0],output_row_name='bubble_cc_max_area_prop')
             poor_qual_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,poor_qual_set_cc,output_row_name='bubble_cc_max_area_prop')
@@ -743,5 +881,3 @@ else:
                     f.write(f'weak_emb_cand_set:{weak_emb_cand_set}\n')
                     if version_num >= 9.9:
                         f.write(f'\nhas_weak_emb_set(rescue_weak_emb_by_dens):{has_weak_emb_set}\n')
-
-            
