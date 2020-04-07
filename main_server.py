@@ -29,6 +29,7 @@ parser.add_argument('--has_proc', type=int)
 parser.add_argument('--chunk_idx', type=int)
 parser.add_argument('--chunk_size', type=int)
 parser.add_argument('--version', type=float)
+parser.add_argument('--resize', type=float)
 args = parser.parse_args()
 '''
 user-specified arguments (from server input)
@@ -49,9 +50,7 @@ chunk_size = args.chunk_size#4000#the number of imgs to process at a time
 is_save = True
 plot_interm = False
 version_num = args.version#9.7
-img_width = 600
-img_height = 900
-resize = False
+resize = args.resize
 folder_list = []
 has_tif = []
 no_tif =[]
@@ -150,6 +149,18 @@ else:
     img_num_real = 0
     ignore_num = 0 
     img_re_idx = 0 #relative index for images in start_img_idx to end_img_idx
+    
+    #[resize](Dingyi)
+    #get img size
+    img = Image.open(img_paths[1]).convert('L') #.convert('L'): gray-scale # 646x958
+    img_array = np.float32(img)
+    if is_flip:
+        img_width = min(img_array.shape[1], 800)
+        img_height = math.ceil(min(img_width/img_array.shape[1] * img_array.shape[0] , img_array.shape[0]))  
+    else:
+        img_height = min(img_array.shape[0], 800)
+        img_width = math.ceil(min(img_height/img_array.shape[0] * img_array.shape[1] , img_array.shape[1]))
+    
     for filename in img_paths[(start_img_idx-1):]: #original img: 958 rowsx646 cols
         #can't just use end_img_idx for img_paths cuz of th.jpg
         if img_re_idx < chunk_size and img_re_idx < end_img_idx:#real_end_img_idx for in3_stem, or else run into OSError("image file is truncated")
@@ -310,7 +321,8 @@ else:
             #read-in stem.jpg
             stem_img0=Image.open(stem_path).convert('L') #.convert('L'): gray-scale # 646x958
             stem_arr0 = np.float32(stem_img0)/255 #convert to array and {0,255} --> {0,1}
-            
+            if resize:
+                stem_arr0 = cv2.resize(stem_arr0,(img_width,img_height))
             is_stem_mat_cand = np.zeros(img_stack.shape)#initialize by 0's (easier for padding left, right)
             is_stem_mat_cand[0,:,:] = stem_arr0#initialize 1st img's stem by stem.jpg
             for img_re_idx in range(1, img_stack.shape[0]):#1 cuz will look at (img_re_idx-1,img_re_idx) at once
@@ -433,13 +445,13 @@ else:
         else:#normal direction
             c1_sz = max(round(25/646*img_nrow),1)
             d1_sz = max(round(10/646*img_nrow),1)
-        final_area_th = 78
+         
         max_emb_prop = 0.3#(has to be > 0.05 for a2_stem img_idx=224; has to > 0.19 for c4_stem img_idx=39; has to <0.29 for a4_stem img_idx=5; but has to be <0.19 for a4_stem img_idx=1
         #TODO: don't use max_emb_prop, but use img_sum?
         density_th = 0.3#<0.32 for cas2.2 stem img_idx=184
-        num_px_th = 50
+        num_px_th = 50#[Dingyi] consider changing it to 20?
         ratio_th=35  
-        final_area_th2 = 80
+        
         emb_freq_th = 0.05#5/349=0.014#a2_stem #depends on which stages the photos are taken
         cc_th = 3
         window_size = 200
@@ -452,11 +464,21 @@ else:
         second_rect_dens_max = 0.3
         second_area_max = 0.2
         hough_param2=15#10
+        
+        if resize:
+            final_area_th = 55#[Dingyi]before resize is 78 change 55 as (alcat2 stem 376 img have )
+            final_area_th2 = 55#[Dingyi]used to be 80
+            median_kernel_sz = 2#[Dingyi suggested]C2.2_stem, filter_stack, img_idx: 122,146,148,152,159,185,188,190,194
+        else:
+            final_area_th = 78
+            final_area_th2 = 80
+            median_kernel_sz = 5
     
     bin_stem_stack = bin_stack*is_stem_mat2
     '''1st stage'''
     if is_stem==True:
-        filter_stack = median_filter_stack(is_stem_mat2*th_stack,5)#5 is better than max(round(5/646*img_ncol),1) for cas2.2_Stem
+        filter_stack = median_filter_stack(is_stem_mat2*th_stack,median_kernel_sz)#[resize Dingyi]might consider 2?#5 is better than max(round(5/646*img_ncol),1) for cas2.2_Stem
+            
         print("median filter done")
         
         '''
@@ -502,7 +524,7 @@ else:
                     print(img_idx," : stem_area=0")
                 final_stack1[img_idx,:,:] = find_emoblism_by_filter_contour(bin_stem_stack,filter_stack,img_idx,stem_area = stem_area,final_area_th = final_area_th,
                                                             area_th=area_th, area_th2=area_th2,ratio_th=ratio_th,e2_sz=1,o2_sz=2,cl2_sz=2,c1_sz=c1_sz,d1_sz=d1_sz,
-                                                            plot_interm=plot_interm,max_emb_prop=max_emb_prop,density_th=density_th,num_px_th=num_px_th)
+                                                            plot_interm=plot_interm,max_emb_prop=max_emb_prop,density_th=density_th,num_px_th=num_px_th,resize=resize)
             #TODO: closing/dilate param should depend on the width of stem (now it's depend on width of img)
     else:
         for img_idx in range(0, bin_stack.shape[0]):
@@ -588,7 +610,13 @@ else:
             #plot_gray_img(not_emb_mask,str(window_idx)+"_not_emb_mask")
             if is_save==True:
                 plt.imsave(chunk_folder + "/"+str(window_idx)+"_not_emb_mask.jpg",not_emb_mask,cmap='gray')
-            not_emb_mask_exp = cv2.dilate(not_emb_mask.astype(np.uint8), np.ones((10,10),np.uint8),iterations = 1)#expand a bit
+            
+            if resize:
+                #[Dingyi] 9 instead of 10
+            	not_emb_mask_exp = cv2.dilate(not_emb_mask.astype(np.uint8), np.ones((9,9),np.uint8),iterations = 1)#expand a bit
+            else:
+            	not_emb_mask_exp = cv2.dilate(not_emb_mask.astype(np.uint8), np.ones((10,10),np.uint8),iterations = 1)#expand a bit
+            
             if plot_interm==True:
                 plot_gray_img(not_emb_mask_exp,str(window_idx)+"_not_emb_mask_exp")
             if is_save==True:
@@ -615,15 +643,25 @@ else:
         remove cc wide but not tall
         '''
         has_embolism1 = img_contain_emb(final_stack)
-        blur_radius = 3
-        cc_height_min = 70
+        if resize:
+            if version_num >= 11.4:
+                blur_radius = 3
+                cc_dens_min = 1500#[resize] Diane(cas5.5 stem, 148.jpg (has emb): 1945)
+                weak_emb_height_min = 40##[resize] Diane(cas5.5 stem, 148.jpg (has emb): 49)
+                weak_emb_area_min = 700#[resize] Diane(cas5.5 stem, 148.jpg (has emb): 1158)
+            else:
+                blur_radius = 5 #[Dingyi] 6 is too big might try 5-4
+                cc_dens_min = 1000#hasn't tuned yet(cas5.5 stem, 148.jpg (has emb): 1253)
+                weak_emb_height_min = 25#hasn't tuned #maybe to 30?(cas5.5 stem, 148.jpg (has emb): 33)
+                weak_emb_area_min = 500#hasn't tuned(cas5.5 stem, 148.jpg (has emb): 707) 
+            cc_height_min = 49 #[Dingyi]alcalt 2 stem img:218 50
+        else:
+            blur_radius = 3
+            cc_height_min = 70
         cc_area_min = 1000
         cc_area_max = 75000
         cc_width_min = 25	
         cc_width_max = 200#100#v9.82(100-->150):#v9.83(150-->200) c5_stem img_idx=28: cc_width=157#basically useless
-        weak_emb_height_min = 25#hasn't tuned #maybe to 30?(cas5.5 stem, 148.jpg (has emb): 33)
-        weak_emb_area_min = 500#hasn't tuned(cas5.5 stem, 148.jpg (has emb): 707) 
-        cc_dens_min = 1000#hasn't tuned yet(cas5.5 stem, 148.jpg (has emb): 1253) 
         
         final_stack_prev_stage = np.copy(final_stack)
         input_stack = filter_stack*final_stack_prev_stage
