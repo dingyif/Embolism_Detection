@@ -13,7 +13,7 @@ library(plotly)
 ```
 #Read Data from TIFF file
 ```{r}
-pred_tiff = bioimagetools::readTIF('a2_stem/predict.tif')
+pred_tiff = bioimagetools::readTIF('a2_stem/v9.3_0_1_900/predict.tif')
 num_imgs <- dim(pred_tiff)[3]
 row_num  <- dim(pred_tiff)[1]
 col_num  <- dim(pred_tiff)[2] 
@@ -74,6 +74,13 @@ diff_time_list_tp <- diff_time_list_int[tp_img_idx]
 embolism_table <-  data.frame(embolism_time,diff_time_list_tp,number_emb)
 colnames(embolism_table) <- c('embolism_time','time_since_start(mins)','number_emb')
 ```
+#data after vectorize, subset the embolism table that only contain those passed alpha shape
+```{r}
+polygon_vertices <- read.csv('polygon_vertices_df.csv',row.names = 1)
+embo_table_alpha <- embolism_table[embolism_table$number_emb %in% unique(polygon_vertices$Z),]
+```
+
+
 #data to feed image
 ```{r}
 sum_tiff <- array(rep(0,row_num*col_num),dim = c(row_num,col_num))
@@ -136,6 +143,7 @@ library(EBImage)
 library(ggplot2)
 library(Matrix)
 library(dplyr)
+library(RColorBrewer)
 # Define UI for application 
 ui <- fluidPage(#theme = shinytheme("cosmo"),
   tags$style(css),
@@ -154,14 +162,15 @@ ui <- fluidPage(#theme = shinytheme("cosmo"),
             numericInput(inputId = 'number',label = 'Points Number in Scatterplot',value = 20000, 
                          min = 20000, max = 60000,step = 1000),
         selectInput("plot_name", "Select the Plot",
-                  choices = c("Image","Plotly","Hexagonal"),
+                  choices = c("Image","Plotly","Plotly_vec"),
                   selected = "Image")
         ),
         # Show a plot of the generated distribution
         mainPanel(
             textOutput("folder_name"),
-            conditionalPanel(condition = "input.plot_name != 'Plotly'", plotOutput("plot")),
+            conditionalPanel(condition = "input.plot_name == 'Image'", plotOutput("plot")),
             conditionalPanel(condition = "input.plot_name == 'Plotly'",plotlyOutput("plotly")),
+            conditionalPanel(condition = "input.plot_name == 'Plotly_vec'",plotlyOutput("plotly_vec")),
             tabsetPanel(
             tabPanel("Data",DT::dataTableOutput("table")))
                 )
@@ -173,8 +182,10 @@ ui <- fluidPage(#theme = shinytheme("cosmo"),
 server <- function(input, output) {
   #to put in reactive in select name in future
   output$folder_name <- renderText({"Alclat2_stem"})
+  trace_col <-  colorRampPalette(brewer.pal(10,"Blues"))(36)
+  start_col_idx <- 1
   #prepare for embolism list
-  emb_num_list <- reactive({embolism_table[(input$time*60-embolism_table$`time_since_start(mins)`)>0,"number_emb"]})
+  emb_num_list <- reactive({embo_table_alpha[(input$time*60-embo_table_alpha$`time_since_start(mins)`)>0,"number_emb"]})
   plotly_data <- reactive({plot_mat_all[which(plot_mat_all$Z %in% emb_num_list()),]})
   #reduce the data if its too large
   large_data <- reactive({if(nrow(plotly_data()) > input$number) {return(TRUE)} else{return(FALSE)}})
@@ -201,20 +212,33 @@ server <- function(input, output) {
        # Change font size to 10 lab with width and Height
       theme_classic(base_size=10) +labs(x = "Width", y = "Height")+ scale_fill_gradient("Times in the hexagon") }}
     })
+  
   output$plotly <- renderPlotly({
     if (input$plot_name == 'Plotly'){
-    x_a <- list(range = c(0,col_num + 50))
-    y_a <-list(range = c(0,row_num + 50))
+    x_a <- list(range = c(0,col_num + 50), title = 'col')
+    y_a <-list(range = c(0,row_num + 50), title = 'row')
     if(large_data() ==FALSE){
     plot_ly(plotly_data(), x = ~ col ,y = ~ row,type = "scatter", hoverinfo = "text",text = ~paste(Z, "emb"),marker = list(size = 1, opacity = 0.8, color = ~ Z, colorbar=list(title='Seq of Appear'),colorscale = "Picnic",reversescale =T)) %>% layout(xaxis = x_a, yaxis = y_a )}
     else {
     plot_ly(reduce_data(), x = ~ col ,y = ~ row,type = "scatter", hovertext = ~ Z, marker = list(size = 1, opacity = 0.8, color = ~ Z, colorbar=list(title='Seq of Appear'),colorscale = "Picnic",reversescale =T)) %>% layout(xaxis = x_a, yaxis = y_a )
     } 
 }})
-                  
+    
+  output$plotly_vec <- renderPlotly({
+    if(input$plot_name == 'Plotly_vec') {
+      fig <- plot_ly() %>% layout(xaxis = list(title = 'row',range = c(0,650 + 50)),
+         yaxis = list(title = 'col',range = c(0,950 + 50)))
+      #prepare the color of embolism trace need to set constant
+      for (i in emb_num_list()) {
+        #color = I(specific color) so that the line nad filling will be the same 
+        fig <- fig %>% add_trace(data = polygon_vertices[polygon_vertices$Z %in% c(i),], x = ~row, y = ~col,color = I(trace_col[start_col_idx]), name = paste('emb: ',i), type = 'scatter',mode= 'lines', fill = 'toself' )
+        start_col_idx <- start_col_idx + 1}
+        fig
+    }
+  })         
   output$table <- DT::renderDataTable({
         #select the data
-        if (length(emb_num_list()) != 0) {embolism_table[which(embolism_table$number_emb %in% emb_num_list()),]}})
+        if (length(emb_num_list()) != 0) {embo_table_alpha[which(embo_table_alpha$number_emb %in% emb_num_list()),]}})
   output$downloadData <- downloadHandler(filename = function(){paste("Embolism-",tail(emb_num_list(),n = 1) ,".csv",sep = "")}, content = function(file){write.csv(plotly_data,file)})
 }
 
@@ -222,6 +246,30 @@ server <- function(input, output) {
 shinyApp(ui = ui, server = server)
 ```
 
+```{r}
+polygon_vertices <- read.csv('polygon_vertices_df.csv',row.names = 1)
+polygon_vertices_4 <- polygon_vertices[polygon_vertices$z %in% c(4),]
+polygon_vertices_1 <- polygon_vertices[polygon_vertices$z %in% c(1),]
+fig <- plot_ly(x = ~polygon_vertices_1$y, y = ~polygon_vertices_1$x, type = 'scatter',mode= 'lines', fill = 'to')
+fig <- fig %>% layout(xaxis = list(title = 'row',range = c(0,650 + 50)),
+         yaxis = list(title = 'col',range = c(0,950 + 50) ))
+for (i in c(2,4,5,9)) {
+  fig <- fig %>% add_trace(data = polygon_vertices[polygon_vertices$z %in% c(i),], x = ~y, y = ~x, type = 'scatter',mode= 'lines', fill = 'tonexty' )}
+```
+
+
+```{r}
+fig <- plot_ly() %>% layout(xaxis = list(title = 'row',range = c(0,650 + 50)),
+         yaxis = list(title = 'col',range = c(0,950 + 50)))
+      #prepare the color of embolism trace
+emb_num_list <- embo_table_alpha$number_emb
+trace_col <-  colorRampPalette(brewer.pal(10,"Spectral"))(length(emb_num_list))
+start_col_idx <- 1
+for (i in emb_num_list) {
+      fig <- fig %>% add_polygons(data = polygon_vertices[polygon_vertices$Z %in% c(i),], x = ~row, y = ~col,color = I(trace_col[start_col_idx]), name = paste('emb: ',i))
+        start_col_idx <- start_col_idx + 1}
+        fig
+```
 
 
 
