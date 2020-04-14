@@ -1,10 +1,10 @@
 ---
 title: "DataGet"
-author: " "
+author: "Dingyi Fang"
 date: "4/14/2020"
 output: html_document
 ---
-
+#Read File Part
 ```{r}
 library(bioimagetools)
 #Read Data from TIFF file
@@ -12,28 +12,14 @@ pred_tiff = bioimagetools::readTIF('predict.tif')
 num_imgs <- dim(pred_tiff)[3]
 row_num  <- dim(pred_tiff)[1]
 col_num  <- dim(pred_tiff)[2] 
-```
-
-```{r}
+#get the embolism time data.
+all_files <- list.files('Alclat2_stem.DONEGOOD.HANNAH.9.26', pattern = '.png')
 #get the idx name correct one in R
-tp_img_idx <- as.vector(unlist(read.csv('tp_sep_strong_emb.txt',header = FALSE))) + 1
+tp_img_idx <- as.vector(unlist(read.csv('true_positive_index.txt',header = FALSE)))+1
 #how many tp img in there
 tp_num <- length(tp_img_idx)
 ```
-
-```{r}
-sum_tiff <- array(rep(0,row_num*col_num),dim = c(row_num,col_num))
-plot_tiff <- array(rep(0, row_num*col_num*tp_num), dim=c(row_num, col_num, tp_num))
-i = 1
-for (number in tp_img_idx) {
-  sum_tiff <- sum_tiff + pred_tiff[,,number]
-  sum_tiff <- abs(sum_tiff -1)
-  #make the mat sparse to easy plot
-  plot_tiff[,,i] <- sum_tiff
-  i = i+1
-}
-```
-
+#Processing the tiff into matrix pixel value
 ```{r}
 #column data for X and row data for Y
 num = 1
@@ -46,9 +32,65 @@ for (j in tp_img_idx) {
  num <- num+ 1
 }
 ```
+#Processing the time list
+```{r}
+#get the photo taken time
+date_time_list = NULL
+#initial the start time 
+for (file in all_files) {
+  time_str = unlist(strsplit(file, split = '.png'))
+  #put all year month day in formate
+  Year = substr(time_str,1,4)
+  Month = substr(time_str,5,6)
+  Day = substr(time_str,7,8)
+  YMD = paste(Year,Month,Day,sep = '-')
+  Hour = substr(time_str,10,11)
+  Minute = substr(time_str,12,13)
+  Secs = substr(time_str,14,15)
+  HMS = paste(Hour,Minute,Secs, sep = ':')
+  date_time = paste(YMD,HMS,sep = ' ')
+  date_time_list = c(date_time_list,date_time)
+}
+#compute the relative time
+date_time_list = date_time_list[1:num_imgs+1]
+start_time = date_time_list[1]
+diff_time_list = NULL
+for (date_time in date_time_list) {
+  diff_time = difftime(date_time,start_time, units = 'mins')
+  diff_time_list = c(diff_time_list, diff_time)
+}
+diff_time_list_int <- floor(diff_time_list)
+#put in the data frame to show table
+number_emb = seq(1,tp_num)
+embolism_time <- date_time_list[tp_img_idx]
+diff_time_list_tp <- diff_time_list_int[tp_img_idx]
+embolism_table <-  data.frame(embolism_time,diff_time_list_tp,number_emb)
+colnames(embolism_table) <- c('embolism_time','time_since_start(mins)','number_emb')
+```
+#merge the two datafram togther 
+```{r}
+plot_mat_time <- merge(plot_mat_all,embolism_table, by.x= 'Z', by.y= 'number_emb',all.x = TRUE)
+```
 
 ```{r}
 #Transform into csv formate
-write.csv2(plot_mat_all,file = 'alcat2.csv',row.names = TRUE)
+write.csv2(plot_mat_time,file = 'alcat2.csv', row.names = TRUE)
 ```
+
+#(NO need to run if its just get the csv)
+```{r}
+#data to feed image to plot
+sum_tiff <- array(rep(0,row_num*col_num),dim = c(row_num,col_num))
+plot_tiff <- array(rep(0, row_num*col_num*tp_num), dim=c(row_num, col_num, tp_num))
+i = 1
+for (number in tp_img_idx) {
+  sum_tiff <- sum_tiff + pred_tiff[,,number]
+  sum_tiff <- abs(sum_tiff -1)
+  #make the mat sparse to easy plot
+  plot_tiff[,,i] <- sum_tiff
+  i = i+1
+}
+```
+
+
 
