@@ -1,0 +1,54 @@
+---
+title: "DataGet"
+author: " "
+date: "4/14/2020"
+output: html_document
+---
+
+```{r}
+library(bioimagetools)
+#Read Data from TIFF file
+pred_tiff = bioimagetools::readTIF('predict.tif')
+num_imgs <- dim(pred_tiff)[3]
+row_num  <- dim(pred_tiff)[1]
+col_num  <- dim(pred_tiff)[2] 
+```
+
+```{r}
+#get the idx name correct one in R
+tp_img_idx <- as.vector(unlist(read.csv('tp_sep_strong_emb.txt',header = FALSE))) + 1
+#how many tp img in there
+tp_num <- length(tp_img_idx)
+```
+
+```{r}
+sum_tiff <- array(rep(0,row_num*col_num),dim = c(row_num,col_num))
+plot_tiff <- array(rep(0, row_num*col_num*tp_num), dim=c(row_num, col_num, tp_num))
+i = 1
+for (number in tp_img_idx) {
+  sum_tiff <- sum_tiff + pred_tiff[,,number]
+  sum_tiff <- abs(sum_tiff -1)
+  #make the mat sparse to easy plot
+  plot_tiff[,,i] <- sum_tiff
+  i = i+1
+}
+```
+
+```{r}
+#column data for X and row data for Y
+num = 1
+plot_mat_all <- data.frame()
+for (j in tp_img_idx) {
+ plot_mat_j <- which(abs(pred_tiff[,,j]-1)!=0 , arr.ind = T)
+ plot_mat_j <- data.frame(plot_mat_j)
+ plot_mat_j$Z <- num
+ plot_mat_all <- rbind(plot_mat_all,plot_mat_j)
+ num <- num+ 1
+}
+```
+
+```{r}
+#Transform into csv formate
+write.csv2(plot_mat_all,file = 'alcat2.csv',row.names = TRUE)
+```
+
