@@ -5,17 +5,28 @@ date: "4/14/2020"
 output: html_document
 ---
 #Read File Part
+```{r path}
+#[Diane]
+img_dir <- '../../Done/Processed'
+dir_path <- 'F:/server_output/processed/v11/Alclat2_stem.DONEGOOD.HANNAH.9.26/v11.0_0_1_900'
+dir_split <- strsplit(dir_path,"/")[[1]]
+version_name <- dir_split[length(dir_split)-2]
+folder_name <- dir_split[length(dir_split)-1]#Alclat2_stem.DONEGOOD.HANNAH.9.26
+folder_name_short <- strsplit(folder_name,".", fixed = TRUE)[[1]][1]#Alclat2_stem. fixed=TRUE to avoid interpreting "." as a regex
+output_dir <- 'F:/emb_data'
+```
+
 ```{r}
 library(bioimagetools)
 #Read Data from TIFF file
-pred_tiff = bioimagetools::readTIF('predict.tif')
+pred_tiff = bioimagetools::readTIF(file.path(dir_path,'predict.tif'))
 num_imgs <- dim(pred_tiff)[3]
 row_num  <- dim(pred_tiff)[1]
 col_num  <- dim(pred_tiff)[2] 
 #get the embolism time data.
-all_files <- list.files('Alclat2_stem.DONEGOOD.HANNAH.9.26', pattern = '.png')
+all_files <- list.files(file.path(img_dir,folder_name), pattern = '.png')
 #get the idx name correct one in R
-tp_img_idx <- as.vector(unlist(read.csv('true_positive_index.txt',header = FALSE)))+1
+tp_img_idx <- as.vector(unlist(read.csv(file.path(dir_path,'true_positive_index.txt'),header = FALSE)))+1
 #how many tp img in there
 tp_num <- length(tp_img_idx)
 ```
@@ -74,7 +85,17 @@ plot_mat_time <- merge(plot_mat_all,embolism_table, by.x= 'Z', by.y= 'number_emb
 
 ```{r}
 #Transform into csv formate
-write.csv2(plot_mat_time,file = 'alcat2.csv', row.names = TRUE)
+#[Diane]
+if(!file.exists(output_dir)){
+  dir.create(output_dir)
+}
+if(!file.exists(file.path(output_dir,version_name))){
+  dir.create(file.path(output_dir,version_name))
+}
+if (!file.exists(file.path(output_dir,version_name,folder_name_short))){
+    dir.create(file.path(output_dir,version_name,folder_name_short))
+}
+write.csv2(plot_mat_time,file = file.path(output_dir,version_name,folder_name_short,'emb_points_time.csv'),row.names = TRUE)
 ```
 
 #(NO need to run if its just get the csv)
