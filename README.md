@@ -2,18 +2,21 @@
  
 ## Current version: 11 or 12
  
+
 ### Notation:
 Images from one experiment = the images in one folder
 Usually there are five to ten experiments for one species (depending on whether they have images for both stem and leaf).
- 
+
+
 ## I. Differencing:
 A.     Take the difference between consecutive gray-scale images
 B.     Note: flip sign for leafs. because embolism seems to take places where the vein becomes "darker” for leafs 
 (If we don’t flip the sign, there’s barely any embolism. ImageJ is doing this way as well. Chris doesn’t know why either.)
 
-## II.  Thresholding
 
+## II.  Thresholding
 A.     clip pixel values smaller than 3 to 0 (3 is suggested by Chris)
+
 
 ## III.Binarizing
 A.     convert all positive pixel values to 1, the resulting image only has values (1 or 0),
@@ -59,6 +62,7 @@ e.     Note: [version 10] doesn’t have assumption ii.
 It takes the intersection of the above results with the results obtained using thresholding green layer (without largest area requirement)
 i.       Problem: thresholding green layer produces unstable results as it’s a fixed threshold with the existence of challenge 4 [browner]
  
+ 
 ## V.  Poor Quality (stem only)
 A.     Apply Hough transformations on each median filtered image to detect circles (which could be bubbles/embolism/shifting/plastic cover). If the maximum of the connected component area is greater than a fixed threshold, then the image is classified as poor quality.
 B.     Output: a vector of image index that are considered as poor quality (poor_qual_set_cc)
@@ -68,7 +72,9 @@ C.     Motivation:
 D.     Problem:
 1.     Bubbles sometimes might not look like circles (Ex: half of a circle), so those won’t be able to detect correctly.
 2.     Currently can’t separate bubbles, embolism, shifting, plastic cover correctly (TODO: shifting can probably be detected using correlation in previous step: Foreground Background Segmentation)
-VI.  Detect embolism (1st stage)
+
+
+## VI.  Detect embolism (1st stage)
 A.     Steps:
 For each image (not in poor_qual_set_cc for stem):
 1.     connect the embolism parts in the median-filtered image (more false positive)
@@ -85,6 +91,7 @@ a.     Motivation: To avoid the case that a small noise in step 2 leads to a rea
 4.     reduce false positive
 a.     (stem only) if the total predicted embolism area is too BIG (probably due to shifting) or too SMALL (negligible), predict no embolism
 b.     Then discard connected components with low density and small area
+
 
 ## VII. Reduce False Positive (2nd stage)
 A.     Stem:
