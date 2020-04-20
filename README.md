@@ -1,21 +1,25 @@
-# embolism_project
-
-Embolism Detection Method Summary
+# Embolism Detection Method Summary
  
-Current version: 11 or 12
+## Current version: 11 or 12
  
-Notation:
+### Notation:
 Images from one experiment = the images in one folder
 Usually there are five to ten experiments for one species (depending on whether they have images for both stem and leaf).
  
-I.    Differencing:
+## I. Differencing:
 A.     Take the difference between consecutive gray-scale images
-B.     Note: flip sign for leafs. because embolism seems to take places where the vein becomes "darker” for leafs (If we don’t flip the sign, there’s barely any embolism. ImageJ is doing this way as well. Chris doesn’t know why either.)
-II.  Thresholding
+B.     Note: flip sign for leafs. because embolism seems to take places where the vein becomes "darker” for leafs 
+(If we don’t flip the sign, there’s barely any embolism. ImageJ is doing this way as well. Chris doesn’t know why either.)
+
+## II.  Thresholding
+
 A.     clip pixel values smaller than 3 to 0 (3 is suggested by Chris)
-III.Binarizing
-A.     convert all positive pixel values to 1, the resulting image only has values (1 or 0), where 0 means there’s no change at that pixel between two consecutive gray-scale images.
-IV.  Foreground Background Segmentation (stem only)
+
+## III.Binarizing
+A.     convert all positive pixel values to 1, the resulting image only has values (1 or 0),
+ where 0 means there’s no change at that pixel between two consecutive gray-scale images.
+
+## IV.  Foreground Background Segmentation (stem only)
 A.     Motivation: To reduce false positive, because there are clearly parts that are background (i.e. not stem) due to the way images are captured under current setting
 B.     Challenge:
 1.     [shift] Stem is almost always shifting due to gel movement. It’s just that sometimes it’s a negligible small shift, while sometimes it’s a big shift that would cause people to think there are a lot of embolism events just by looking at the binarized difference image because the binarized difference image is very dark.
@@ -55,7 +59,7 @@ e.     Note: [version 10] doesn’t have assumption ii.
 It takes the intersection of the above results with the results obtained using thresholding green layer (without largest area requirement)
 i.       Problem: thresholding green layer produces unstable results as it’s a fixed threshold with the existence of challenge 4 [browner]
  
-V.  Poor Quality (stem only)
+## V.  Poor Quality (stem only)
 A.     Apply Hough transformations on each median filtered image to detect circles (which could be bubbles/embolism/shifting/plastic cover). If the maximum of the connected component area is greater than a fixed threshold, then the image is classified as poor quality.
 B.     Output: a vector of image index that are considered as poor quality (poor_qual_set_cc)
 C.     Motivation:
@@ -81,7 +85,8 @@ a.     Motivation: To avoid the case that a small noise in step 2 leads to a rea
 4.     reduce false positive
 a.     (stem only) if the total predicted embolism area is too BIG (probably due to shifting) or too SMALL (negligible), predict no embolism
 b.     Then discard connected components with low density and small area
-VII. Reduce False Positive (2nd stage)
+
+## VII. Reduce False Positive (2nd stage)
 A.     Stem:
 1.     Don't count as embolism if it keeps appearing (probably is plastic cover or bubbles)
 a.     Steps: Look at first 200 images, if the frequency of predicted embolism at the same pixel location is too high, treat it as no embolism. Then repeat the process for the next 200 images (image index: 201~400) (rolling window).
