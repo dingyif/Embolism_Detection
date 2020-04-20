@@ -24,21 +24,26 @@ A.     convert all positive pixel values to 1, the resulting image only has valu
 
 ## IV.  Foreground Background Segmentation (stem only)
 A.     Motivation: To reduce false positive, because there are clearly parts that are background (i.e. not stem) due to the way images are captured under current setting
+
 B.     Challenge:
-1.     [shift] Stem is almost always shifting due to gel movement. It’s just that sometimes it’s a negligible small shift, while sometimes it’s a big shift that would cause people to think there are a lot of embolism events just by looking at the binarized difference image because the binarized difference image is very dark.
-2.     [bark] Separate stem from bark (ex: In5_Stem, in3 stem)
-3.     [shrink] Stem shrinks as time goes by because of dehydration.
-4.     [browner] Stem changes color as time goes by because of dehydration. (ex: green to brown)
-5.     [color] Stem in the images might not be “green with a red background”. There are cases where the stem is light yellow and the background is dark brown.
+					1.[shift] Stem is almost always shifting due to gel movement. 
+      It’s just that sometimes it’s a negligible small shift, while sometimes it’s a big shift that would cause people to think there are a lot of embolism events just by looking at the binarized difference image because the binarized difference image is very dark.
+     2.[bark] Separate stem from bark (ex: In5_Stem, in3 stem)
+					3.[shrink] Stem shrinks as time goes by because of dehydration.
+     4.[browner] Stem changes color as time goes by because of dehydration. (ex: green to brown)
+     5.[color] Stem in the images might not be “green with a red background”. There are cases where the stem is light yellow and the background is dark brown.
+	
 C.     Have tried:
-1.     If a pixel doesn’t change gray-scaled value too often across time, it’s classified as foreground
-a.     Steps: Apply low pass filter (Gaussian filter) on mean image (take the average of all images from one experiment). Then use a fixed threshold (for all species) for thresholding.
-b.     Output: The same mask (mask would be a matrix that determines whether this pixel position is foreground or not) for all images in an experiment (i.e. a folder)
-c.      Assumption:
-i.       There would be many random noises in the background, while less in the foreground. (If pixel value > threshold in LPF mean image, should be classified as noise)
-ii.      Foreground barely moves and foreground object shape is not changing over time.
-d.     Problem: challenge 1 [shift] and 3 [shrink] violate assumption ii
-2.     [version<10] If a pixel is green enough and blue enough, it’s classified as foreground
+
+     1.If a pixel doesn’t change gray-scaled value too often across time, it’s classified as foreground
+								a.Steps: Apply low pass filter (Gaussian filter) on mean image (take the average of all images from one experiment). Then use a fixed threshold (for all species) for thresholding.
+								b.Output: The same mask (mask would be a matrix that determines whether this pixel position is foreground or not) for all images in an experiment (i.e. a folder)
+								c.Assumption:
+												i.There would be many random noises in the background, while less in the foreground. (If pixel value > threshold in LPF mean image, should be classified as noise)
+												ii.Foreground barely moves and foreground object shape is not changing over time.
+								d.Problem: challenge 1 [shift] and 3 [shrink] violate assumption ii
+								
+					2.[version<10] If a pixel is green enough and blue enough, it’s classified as foreground
 a.     Steps: Apply a low pass filter (Gaussian filter) on one image’s green layer and use a fixed threshold (for all species) for thresholding. Only keep the connected component with the largest area. Also do the same on one image’s blue layer. Then take the intersection between these two results.
 b.     Output: One mask for every image in an experiment. Drop the last mask to match the size of binarized difference image stack.
 c.      Assumption:
