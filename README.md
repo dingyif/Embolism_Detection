@@ -10,6 +10,7 @@ Usually there are five to ten experiments for one species (depending on whether 
 
 ## I. Differencing:
 A.     Take the difference between consecutive gray-scale images
+
 B.     Note: flip sign for leafs. because embolism seems to take places where the vein becomes "darker” for leafs 
 (If we don’t flip the sign, there’s barely any embolism. ImageJ is doing this way as well. Chris doesn’t know why either.)
 
