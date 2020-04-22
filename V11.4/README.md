@@ -1,5 +1,3 @@
-some old version archive
-
 + v11: weak emb + (strong emb + noise): haven't combine CNN results that try to separate strong emb from noise in google drive
 
 
