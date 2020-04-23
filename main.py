@@ -12,7 +12,7 @@ from func import plot_gray_img, to_binary,plot_img_sum, plot_overlap_sum
 from func import add_img_info_to_stack, extract_foregroundRGB,foreground_B,mat_reshape, corr_image
 from func import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set, remove_cc_by_geo, rescue_weak_emb_by_dens
 from func import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
-from func import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric,print_used_time
+from func import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric,print_used_time, foregound_Th_OTSU
 from density import density_of_a_rect
 from detect_by_filter_fx import median_filter_stack
 import math
@@ -22,17 +22,18 @@ start_time = datetime.datetime.now()
 '''
 user-specified arguments
 '''
-folder_idx_arg = 2
-#disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-disk_path = 'E:/Diane/Col/research/code/'
+folder_idx_arg = 4
+disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+#disk_path = 'E:/Diane/Col/research/code/'
 has_processed = True#Working on Processed data or Unprocessed data
 chunk_idx = 0#starts from 0
 chunk_size = 200#the number of imgs to process at a time #try to be a multiple of window_size(200), or else last stage of rolling window doesn't work well
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
 plot_interm = False
-version_num = 11.4
-resize = True
+version_num = 13
+resize = False
+initial_stem = True #the algo will initial a stem img
 folder_list = []
 has_tif = []
 no_tif =[]
@@ -99,7 +100,6 @@ else:
     if "inglau2_stem" in img_folder_name.lower():#is_stem==True and img_nrow < img_ncol: (can't use this for T1,T2_stem)
         print("[CAUTION] flipped img!")
         is_flip=True
-
 
     if "stem" in img_folder.lower():
         is_stem = True
@@ -288,11 +288,21 @@ else:
         #be more consservative about shifting, else error accumulation...
         shift_px_min = 0
         shift_ratio = 0.95
-        
+        if initial_stem:
+            #initial the stem area for the first img of the chunk size
+            frist_img_array = cv2.imread(img_paths[(start_img_idx-1):end_img_idx][0])
+            is_stem_mat_init = foregound_Th_OTSU(frist_img_array,img_re_idx = 1,chunk_folder = chunk_folder)
+            shutil.rmtree(os.path.join(img_folder,"input"))#in case it already existed.
+            os.makedirs(os.path.join(img_folder,"input")) #create the folder to save stem.jpg
+            plt.imsave(img_folder + "/input" + "/stem.jpg",is_stem_mat_init,cmap='gray')
+            print('stem.jpg is successfully initialized')
+
         stem_path = os.path.join(img_folder,"input", "stem.jpg")#input img (stem for 1st img)
+
         if version_num >=10 and not os.path.exists(stem_path):
             print("error : no input/stem.jpg")
             sys.exit("Error: no input/stem.jpg")
+        #need to put in the stem area here
         elif version_num >= 10 and os.path.exists(stem_path):
             '''
             v10:
@@ -329,9 +339,27 @@ else:
                     pad_after_col=0
                 is_stem_mat_pad = np.pad(is_stem_mat_cand[img_re_idx-1,:,:], ((pad_before_row*2, pad_after_row*2), (pad_before_col*2, pad_after_col*2)), 'edge')
                 is_stem_mat_cand[img_re_idx,:,:]=is_stem_mat_pad[pad_row:img_nrow+pad_row,pad_col:img_ncol+pad_col]
-            
-            is_stem_mat = is_stem_matG*is_stem_mat_cand
-        else:#version_num<10
+            if version_num >= 13:
+                is_stem_mat_OTSU = np.ones(img_stack.shape)
+                img_re_idx = 0
+                for filename in img_paths[(start_img_idx-1):end_img_idx]:
+                    img_OTSU_array = cv2.imread(filename)
+                    img_OTSU_array_resize = cv2.resize(img_OTSU_array,(img_width, img_height))
+                    if img_re_idx==0 and is_save==True:
+                        if resize:
+                            is_stem_mat_OTSU[img_re_idx] = foregound_Th_OTSU(img_OTSU_array_resize,img_re_idx,chunk_folder, is_save = True)
+                        else:
+                            is_stem_mat_OTSU[img_re_idx] = foregound_Th_OTSU(img_OTSU_array,img_re_idx,chunk_folder, is_save = True)
+                    else:
+                        if resize:
+                            is_stem_mat_OTSU[img_re_idx] = foregound_Th_OTSU(img_OTSU_array_resize,img_re_idx,chunk_folder)
+                        else:
+                            is_stem_mat_OTSU[img_re_idx] = foregound_Th_OTSU(img_OTSU_array,img_re_idx,chunk_folder)
+                    img_re_idx = img_re_idx + 1
+                is_stem_mat = is_stem_mat_cand*is_stem_mat_OTSU
+            else:    
+                is_stem_mat = is_stem_matG*is_stem_mat_cand
+        elif version_num <10:#version_num<10
             '''
             v9.7: to separate bark and stem (both very green --> is_stem_mat)
             assume stem is whiter(larger B value)
@@ -646,6 +674,9 @@ else:
         cc_area_max = 75000
         cc_width_min = 25	
         cc_width_max = 200#100#v9.82(100-->150):#v9.83(150-->200) c5_stem img_idx=28: cc_width=157#basically useless
+        cc_dens_min = 1000#[resize] Diane(cas5.5 stem, 148.jpg (has emb): 1945)
+        weak_emb_height_min = 25##[resize] Diane(cas5.5 stem, 148.jpg (has emb): 49)
+        weak_emb_area_min = 500#[resize] Diane(cas5.5 stem, 148.jpg (has emb): 1158)        
         
         final_stack_prev_stage = np.copy(final_stack)
         input_stack = filter_stack*final_stack_prev_stage
