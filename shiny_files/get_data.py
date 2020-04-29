@@ -141,10 +141,15 @@ create binary tiff that records whether an embolism has occured at the same pixe
 '''
 plot_tiff = fx.get_sum_bin_tiff(input_tiff,row_num,col_num,emb_num_plot,emb_img_idx_plot)
 
+
+#from rpy2.robjects import pandas2ri
+#pandas2ri.activate()
+#emb_t_df = pandas2ri.py2ri(embolism_table)
+
 # Saving the outputs to pickle file for shiny app later
 with open(os.path.join(output_folder,'shinydata.pkl'), 'wb') as f:  
     pickle.dump({'num_imgs':num_imgs,'row_num':row_num,'col_num':col_num, 'date_time_list':date_time_list, 
                  'diff_time_list_int':diff_time_list_int, 'embolism_table':embolism_table,  
-                 'plot_mat_all':plot_mat_all, 'plot_tiff':plot_tiff, 'plot_mat_time': plot_mat_time}, f)
+                 'plot_mat_all':plot_mat_all, 'plot_tiff':plot_tiff, 'plot_mat_time': plot_mat_time}, f)#'emb_table_df':emb_t_df,
     
 
