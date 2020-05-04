@@ -14,9 +14,15 @@ version_name <- dir_split[length(dir_split)-2]
 folder_name <- dir_split[length(dir_split)-1]#Alclat2_stem.DONEGOOD.HANNAH.9.26
 folder_name_short <- strsplit(folder_name,".", fixed = TRUE)[[1]][1]#Alclat2_stem. fixed=TRUE to avoid interpreting "." as a regex
 output_dir <- 'F:/emb_data'
+
+#use the below arguments and save different csv file
+use_true_tif <- TRUE #(TRUE):use true labels tif . (FALSE): use predict.tif 
+#default is to plot tp emb.
+plot_fn <- TRUE #(TRUE):plot fn emb. from false_positive_index.txt 
+plot_fp <- FALSE
 ```
 
-```{r}
+```{r read_tif}
 library(bioimagetools)
 #Read Data from TIFF file
 pred_tiff = bioimagetools::readTIF(file.path(dir_path,'predict.tif'))
@@ -31,10 +37,10 @@ tp_img_idx <- as.vector(unlist(read.csv(file.path(dir_path,'true_positive_index.
 tp_num <- length(tp_img_idx)
 ```
 #Processing the tiff into matrix pixel value
-```{r}
+```{r tif_to_mat}
 #column data for X and row data for Y
 num = 1
-plot_mat_all <- data.frame()
+plot_mat_all <- data.frame()#3 cols: row,col,Z
 for (j in tp_img_idx) {
  plot_mat_j <- which(abs(pred_tiff[,,j]-1)!=0 , arr.ind = T)
  plot_mat_j <- data.frame(plot_mat_j)
@@ -44,7 +50,7 @@ for (j in tp_img_idx) {
 }
 ```
 #Processing the time list
-```{r}
+```{r time_list}
 #get the photo taken time
 date_time_list = NULL
 #initial the start time 
@@ -78,12 +84,12 @@ diff_time_list_tp <- diff_time_list_int[tp_img_idx]
 embolism_table <-  data.frame(embolism_time,diff_time_list_tp,number_emb)
 colnames(embolism_table) <- c('embolism_time','time_since_start(mins)','number_emb')
 ```
-#merge the two datafram togther 
-```{r}
-plot_mat_time <- merge(plot_mat_all,embolism_table, by.x= 'Z', by.y= 'number_emb',all.x = TRUE)
+#merge the two dataframe togther 
+```{r merge_df}
+plot_mat_time <- merge(plot_mat_all,embolism_table, by.x= 'Z', by.y= 'number_emb',all.x = TRUE)#5 cols: Z,row,col,embolism_time, time_since_start(mins)
 ```
 
-```{r}
+```{r save_csv}
 #Transform into csv formate
 #[Diane]
 if(!file.exists(output_dir)){
@@ -98,8 +104,8 @@ if (!file.exists(file.path(output_dir,version_name,folder_name_short))){
 write.csv2(plot_mat_time,file = file.path(output_dir,version_name,folder_name_short,'emb_points_time.csv'),row.names = TRUE)
 ```
 
-#(NO need to run if its just get the csv)
-```{r}
+#NO need to run if its just get the csv, need to run it for shiny app
+```{r shiny_data}
 #data to feed image to plot
 sum_tiff <- array(rep(0,row_num*col_num),dim = c(row_num,col_num))
 plot_tiff <- array(rep(0, row_num*col_num*tp_num), dim=c(row_num, col_num, tp_num))
@@ -111,6 +117,9 @@ for (number in tp_img_idx) {
   plot_tiff[,,i] <- sum_tiff
   i = i+1
 }
+
+#save the data needed in shiny app
+save(num_imgs,row_num,col_num,date_time_list, diff_time_list_int, embolism_table,  plot_mat_all, plot_tiff,  file = file.path(output_dir,version_name,folder_name_short,'shinydata.RData'))
 ```
 
 
