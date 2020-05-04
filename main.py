@@ -33,7 +33,7 @@ is_save = True
 plot_interm = False
 version_num = 13
 resize = False
-initial_stem = True #the algo will initial a stem img using OTSU, else it relies on user input for initializing a stem img
+initial_stem = True #the algo will initial a stem img
 folder_list = []
 has_tif = []
 no_tif =[]
@@ -292,8 +292,8 @@ else:
             #initial the stem area for the first img of the chunk size
             frist_img_array = cv2.imread(img_paths[(start_img_idx-1):end_img_idx][0])
             is_stem_mat_init = foregound_Th_OTSU(frist_img_array,img_re_idx = 1,chunk_folder = chunk_folder)
-            if not os.path.exists(os.path.join(img_folder,"input")):#create new folder if not existed
-                os.makedirs(os.path.join(img_folder,"input"))#create the folder to save stem.jpg
+            shutil.rmtree(os.path.join(img_folder,"input"))#in case it already existed.
+            os.makedirs(os.path.join(img_folder,"input")) #create the folder to save stem.jpg
             plt.imsave(img_folder + "/input" + "/stem.jpg",is_stem_mat_init,cmap='gray')
             print('stem.jpg is successfully initialized')
 
@@ -485,9 +485,6 @@ else:
             final_area_th = 78
             final_area_th2 = 80
             median_kernel_sz = 5
-        
-        emb_pro_th_min = 0.0003#if the proportion of embolised pixels are smaller than emb_pro_th_min, treat as no emb
-        #in3 9,13,66.jpg: no emb(FP) ~= 0.00025
     
     bin_stem_stack = bin_stack*is_stem_mat2
     '''1st stage'''
@@ -552,6 +549,59 @@ else:
     if is_stem==True:
         
         final_stack21 = np.copy(final_stack1)
+        '''
+        if there's at least one cc too wide, big area, and dense in bounding box --> flag as poor quality (poor_qual_set2)
+        and treat as if no emb
+        TODO: maybe try using density seg. as in leafs?
+        '''
+        poor_qual_set2 =[]
+        
+        
+        if is_flip==True:#flip for the special horizontal img:
+            middle_row = np.where(is_stem_mat2[0,:,round(img_ncol/2)])[0]#take the middle row(in case top/bottom of stem isn't correctly detected cuz of bark)
+        else:#normal direction
+            middle_row = np.where(is_stem_mat2[0,round(img_nrow/2),:])[0]#take the middle row(in case top/bottom of stem isn't correctly detected cuz of bark)
+        stem_est_width1 = middle_row[-1]-middle_row[0]+1#an estimate of stem_width based on the middle row of is_stem_mat2 1st img
+        stem_est_area1 = np.sum(is_stem_mat2[0,:,:])#stem area of 1st img
+        
+        for img_idx in range(0, final_stack21.shape[0]):
+            current_img = final_stack1[img_idx,:,:]
+            if np.sum(current_img)>0:
+        #        img_ero = cv2.erode(current_img.astype(np.uint8), np.ones((second_ero_kernel_sz,second_ero_kernel_sz),np.uint8),iterations = 1)#erose to seperate embolism from noises
+        #        if plot_interm == True:
+        #            plot_gray_img(img_ero,str(img_idx)+"_img_ero")
+                #density_img_exp = cv2.closing(density_img_ero.astype(np.uint8), ,np.uint8),iterations = 1)#expand to connect
+                img_clo = cv2.morphologyEx(current_img.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((second_clo_kernel_sz,second_clo_kernel_sz),np.uint8))
+                if plot_interm == True:
+                    plot_gray_img(img_clo,str(img_idx)+"_img_clo")
+                num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(img_clo.astype(np.uint8), 8)#8-connectivity
+                
+                
+                #TODO: not sure if this is the correct direction for the special horiz. imgs
+                #first two arg: total number of cc, mat with same input size that labels each cc
+                cc_width = stats[1:,cv2.CC_STAT_WIDTH]#"1:", ignore bgd:0
+                cc_height = stats[1:,cv2.CC_STAT_HEIGHT]
+                cc_area = stats[1:, cv2.CC_STAT_AREA]
+                #largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
+                
+                cc_area_too_big = cc_area/stem_est_area1 > second_area_max
+                cc_too_wide = cc_width/stem_est_width1 > second_width_max
+                cc_high_dens_in_rect = cc_area/(cc_width*cc_height) > second_rect_dens_max
+                #cas2.2 img_idx=193 (true emb) the top bark is wide (0.93) and high dens, so need area
+                #cas2.2 img_idx=6 (false pos) is wide prop (>1) and big area prop (0.239) and high dens (0.425)
+                #cas2.2 img_idx=213 (true emb) is wide prop (>1) and big area proportion (0.22) but density of cc in bounding box is small (0.26)
+                if np.any(cc_too_wide*cc_high_dens_in_rect*cc_area_too_big):
+                    poor_qual_set2.append(img_idx)
+                    final_stack21[img_idx,:,:]=mat_cc*0
+                    if plot_interm==True:
+                        print(img_idx," in poor_qual_set2")
+                    
+
+#        '''
+#        remove imgs with bubble before rolling window
+#        '''
+#        no_bubble_stack = 1-bubble_stack
+#        final_stack21=final_stack1*no_bubble_stack
         
         '''
         Don't count as embolism if it keeps appearing (probably is plastic cover) (rolling window)
@@ -620,13 +670,13 @@ else:
         else:
             blur_radius = 3
             cc_height_min = 70
-            cc_dens_min = 1000#[resize] Diane(cas5.5 stem, 148.jpg (has emb): 1945)
-            weak_emb_height_min = 25##[resize] Diane(cas5.5 stem, 148.jpg (has emb): 49)
-            weak_emb_area_min = 500#[resize] Diane(cas5.5 stem, 148.jpg (has emb): 1158) 
         cc_area_min = 1000
         cc_area_max = 75000
         cc_width_min = 25	
         cc_width_max = 200#100#v9.82(100-->150):#v9.83(150-->200) c5_stem img_idx=28: cc_width=157#basically useless
+        cc_dens_min = 1000#[resize] Diane(cas5.5 stem, 148.jpg (has emb): 1945)
+        weak_emb_height_min = 25##[resize] Diane(cas5.5 stem, 148.jpg (has emb): 49)
+        weak_emb_area_min = 500#[resize] Diane(cas5.5 stem, 148.jpg (has emb): 1158)        
         
         final_stack_prev_stage = np.copy(final_stack)
         input_stack = filter_stack*final_stack_prev_stage
@@ -645,7 +695,7 @@ else:
             final_stack = final_stack + weak_emb_stack
             #weak_emb_stack would be 0/1, and only have 1 in has_weak_emb_set.
             #TODO: add weak_emb_stack to the result from CNN
-    else:#[Diane 0402] leafs 2nd stage    
+    else:    
         final_stack = np.copy(final_stack1)
         '''
         2nd stage for separating the case where embolism parts is connected to the 
@@ -660,7 +710,7 @@ else:
         #density based segmentation
         density_seg_idx = np.nonzero(num_emb_each_img/(img_nrow*img_ncol)>emb_pro_th)#images index that'll be performed density based segmentation on#TODO: tune this
         for img_idx in density_seg_idx[0]:
-            density_img = density_of_a_rect(bin_stem_stack[img_idx,:,:],dens_rect_window_width)#[Diane 0402] uniform square filtered
+            density_img = density_of_a_rect(bin_stem_stack[img_idx,:,:],dens_rect_window_width)
             density_img_th = density_img>dens_img_th #thresholding
             if plot_interm == True:
                 plot_gray_img(density_img_th)
@@ -703,20 +753,17 @@ else:
             if plot_interm == True:
                 plot_gray_img(final_img,str(img_idx)+"_final_img")
             final_stack[img_idx,:,:] = final_img*255
+        #for both stem and leaf:
+        #if the proportion of embolised pixels are smaller than emb_pro_th_min, treat as no emb
+        num_emb_each_img_after = np.sum(np.sum(final_stack/255,axis=2),axis=1)
+        treat_as_no_emb_idx = np.nonzero(num_emb_each_img_after/(img_nrow*img_ncol)<emb_pro_th_min)[0]
+        final_stack[treat_as_no_emb_idx,:,:] = np.zeros(final_stack[treat_as_no_emb_idx,:,:].shape)
+        if version_num >= 11 and is_stem==True:
+            #for final_stack_strong_emb_cand, if the proportion of embolised pixels are smaller than emb_pro_th_min, treat as no emb
+            num_emb_each_img_strong_emb = np.sum(np.sum(final_stack_strong_emb_cand/255,axis=2),axis=1)
+            treat_as_no_emb_idx_strong_emb = np.nonzero(num_emb_each_img_strong_emb/(img_nrow*img_ncol)<emb_pro_th_min)[0]
+            final_stack_strong_emb_cand[treat_as_no_emb_idx_strong_emb,:,:] = np.zeros(final_stack_strong_emb_cand[treat_as_no_emb_idx_strong_emb,:,:].shape)
     
-    #for both stem and leaf:
-    #if the proportion of embolised pixels are smaller than emb_pro_th_min, treat as no emb
-    #TODO: replace /(img_nrow*img_ncol) by /(stem_height*stem_width)?
-    num_emb_each_img_after = np.sum(np.sum(final_stack/255,axis=2),axis=1)
-    treat_as_no_emb_idx = np.nonzero((num_emb_each_img_after/(img_nrow*img_ncol)<emb_pro_th_min) & (num_emb_each_img_after>0))[0]
-    final_stack[treat_as_no_emb_idx,:,:] = np.zeros(final_stack[treat_as_no_emb_idx,:,:].shape)
-    if version_num >= 11 and is_stem==True:
-        #for final_stack_strong_emb_cand, if the proportion of embolised pixels are smaller than emb_pro_th_min, treat as no emb
-        num_emb_each_img_strong_emb = np.sum(np.sum(final_stack_strong_emb_cand/255,axis=2),axis=1)
-        treat_as_no_emb_idx_strong_emb = np.nonzero((num_emb_each_img_strong_emb/(img_nrow*img_ncol)<emb_pro_th_min) & (num_emb_each_img_strong_emb>0))[0]
-        final_stack_strong_emb_cand[treat_as_no_emb_idx_strong_emb,:,:] = np.zeros(final_stack_strong_emb_cand[treat_as_no_emb_idx_strong_emb,:,:].shape)
-        print("[strong emb candidate] imgs where proportion of emb. pixels < emb_pro_th_min: ",treat_as_no_emb_idx_strong_emb)
-    print("imgs where proportion of emb. pixels < emb_pro_th_min: ",treat_as_no_emb_idx)
     print("2nd stage done")
     
     #time
