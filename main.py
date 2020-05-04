@@ -293,15 +293,18 @@ else:
             frist_img_array = cv2.imread(img_paths[(start_img_idx-1):end_img_idx][0])
             is_stem_mat_init = foregound_Th_OTSU(frist_img_array,img_re_idx = 1,chunk_folder = chunk_folder)
             if not os.path.exists(os.path.join(img_folder,"input")):#create new folder if not existed
-                os.makedirs(os.path.join(img_folder,"input"))#create the folder to save stem.jpg
-            plt.imsave(img_folder + "/input" + "/stem.jpg",is_stem_mat_init,cmap='gray')
+                os.makedirs(os.path.join(img_folder,"input"))#create the folder to save stem_OTSU.jpg
+            first_stem_filename = "stem_OTSU.jpg"
+            plt.imsave(img_folder + "/input" + "/"+first_stem_filename,is_stem_mat_init,cmap='gray')
             print('stem.jpg is successfully initialized')
-
-        stem_path = os.path.join(img_folder,"input", "stem.jpg")#input img (stem for 1st img)
+        else:#user-input jpg
+            first_stem_filename = "stem.jpg"
+        
+        stem_path = os.path.join(img_folder,"input", first_stem_filename)#input img (stem for 1st img)
 
         if version_num >=10 and not os.path.exists(stem_path):
-            print("error : no input/stem.jpg")
-            sys.exit("Error: no input/stem.jpg")
+            print("error : no input/"+first_stem_filename)
+            sys.exit("Error: no input/"+first_stem_filename)
         #need to put in the stem area here
         elif version_num >= 10 and os.path.exists(stem_path):
             '''
@@ -858,15 +861,21 @@ else:
                     f.write('img index with bubble:\n')
                     f.write(str(has_bubble_idx+(start_img_idx-1)))
                     f.write(str("\n\n"))
+                    f.write('img index in poor_qual_set1:\n')
+                    f.write(str(poor_qual_set1+(start_img_idx-1)))
+                    f.write(str("\n\n"))
                     f.write(f'geo_invalid_emb_set:{geo_invalid_emb_set}\n')
                     f.write(f'cleaned_but_not_all_geo_invalid_set:{cleaned_but_not_all_geo_invalid_set}\n\n')
                     f.write(f'weak_emb_cand_set:{weak_emb_cand_set}\n')
-                    if version_num >= 9.9:
+                    if version_num >= 9.9: 
                         f.write(f'\nhas_weak_emb_set(rescue_weak_emb_by_dens):{has_weak_emb_set}\n')
                         f.write(f'tp_in_has_weak_emb_idx:{tp_in_has_weak_emb_idx}\n')
                     elif len(con_img_list[2])>0:
                         f.write(f'the number fn in weak_emb_cand_set/the number of fn: {len(fn_in_weak_cand_idx)}/{len(con_img_list[2])}\n')
                         f.write(f'fn_in_weak_cand_idx:{fn_in_weak_cand_idx}\n')
+                    f.write(str("\n\n"))
+                    f.write('img index where proportion of emb. pixels < emb_pro_th_min:\n')
+                    f.write(str(treat_as_no_emb_idx+(start_img_idx-1)))
     else:#match ==False, no more confusion matrix
         if is_stem==True:
             poor_qual_bubble_cc_max_area = subset_vec_set(bubble_cc_max_area_prop_vec,start_img_idx,poor_qual_set_cc,output_row_name='bubble_cc_max_area_prop')
@@ -882,9 +891,14 @@ else:
                     f.write('img index with bubble:\n')
                     f.write(str(has_bubble_idx+(start_img_idx-1)))
                     f.write(str("\n\n"))
+                    f.write('img index in poor_qual_set1:\n')
+                    f.write(str(poor_qual_set1+(start_img_idx-1)))
+                    f.write(str("\n\n"))
                     f.write(f'geo_invalid_emb_set:{geo_invalid_emb_set}\n')
                     f.write(f'cleaned_but_not_all_geo_invalid_set:{cleaned_but_not_all_geo_invalid_set}\n\n')
                     f.write(f'weak_emb_cand_set:{weak_emb_cand_set}\n')
                     if version_num >= 9.9:
                         f.write(f'\nhas_weak_emb_set(rescue_weak_emb_by_dens):{has_weak_emb_set}\n')
-            
+                    f.write(str("\n\n"))
+                    f.write('img index where proportion of emb. pixels < emb_pro_th_min:\n')
+                    f.write(str(treat_as_no_emb_idx+(start_img_idx-1)))
