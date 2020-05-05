@@ -13,6 +13,7 @@ from func import add_img_info_to_stack, extract_foregroundRGB,foreground_B,mat_r
 from func import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set, remove_cc_by_geo, rescue_weak_emb_by_dens
 from func import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
 from func import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric,print_used_time, foregound_Th_OTSU
+from supplement_func import get_each_stage_arg
 from density import density_of_a_rect
 from detect_by_filter_fx import median_filter_stack
 import math
@@ -61,45 +62,8 @@ if args.resize==1:
 else:
     resize = False
 
-if version_num==13.1:
-    #only runs detect embolism main stage (1st stage) w/o foreground seg and poor qual
-    run_foreground_seg = False #to run the foreground segmentation (extracting stem part) or not
-    run_poor_qual = False
-    run_rolling_window = False
-    run_sep_weak_strong_emb = False
-    run_rm_small_emb = False
-elif version_num==13.2:
-    #runs detect embolism main stage (1st stage) w/foreground seg
-    run_foreground_seg = True #to run the foreground segmentation (extracting stem part) or not
-    run_poor_qual = False
-    run_rolling_window = False
-    run_sep_weak_strong_emb = False
-    run_rm_small_emb = False
-elif version_num==13.3:
-    #runs detect embolism main stage (1st stage) w/foreground seg and poor_qual
-    run_foreground_seg = True #to run the foreground segmentation (extracting stem part) or not
-    run_poor_qual = True
-    run_rolling_window = False
-    run_sep_weak_strong_emb = False
-    run_rm_small_emb = False
-elif version_num==13.4:
-    run_foreground_seg = True #to run the foreground segmentation (extracting stem part) or not
-    run_poor_qual = True
-    run_rolling_window = True
-    run_sep_weak_strong_emb = False
-    run_rm_small_emb = False
-elif version_num==13.5:
-    run_foreground_seg = True #to run the foreground segmentation (extracting stem part) or not
-    run_poor_qual = True
-    run_rolling_window = True
-    run_sep_weak_strong_emb = True
-    run_rm_small_emb = False
-else:
-    run_foreground_seg = True #to run the foreground segmentation (extracting stem part) or not
-    run_poor_qual = True
-    run_rolling_window = True
-    run_sep_weak_strong_emb = True
-    run_rm_small_emb = True
+run_foreground_seg,run_poor_qual,run_rolling_window,run_sep_weak_strong_emb,run_rm_small_emb = get_each_stage_arg(version_num)
+
 
 folder_list = []
 has_tif = []
@@ -965,4 +929,3 @@ else:
                         f.write(str("\n\n"))
                         f.write('img index where proportion of emb. pixels < emb_pro_th_min:\n')
                         f.write(str(treat_as_no_emb_idx+(start_img_idx-1)))
-            

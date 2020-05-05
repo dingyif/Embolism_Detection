@@ -15,6 +15,7 @@ from func import img_contain_emb, extract_foreground, find_emoblism_by_contour, 
 from func import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric,print_used_time, foregound_Th_OTSU
 from density import density_of_a_rect
 from detect_by_filter_fx import median_filter_stack
+from supplement_func import get_each_stage_arg
 import math
 import datetime
 start_time = datetime.datetime.now()
@@ -22,7 +23,7 @@ start_time = datetime.datetime.now()
 '''
 user-specified arguments
 '''
-folder_idx_arg = 4
+folder_idx_arg = 3
 disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 #disk_path = 'E:/Diane/Col/research/code/'
 has_processed = True#Working on Processed data or Unprocessed data
@@ -31,51 +32,14 @@ chunk_size = 200#the number of imgs to process at a time #try to be a multiple o
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
 plot_interm = False
-version_num = 13.5
+version_num = 13.006
+#the third digit after decimal point would be used to determine the run argument for each stage
 resize = False
 
 #only incoorporated in "stem", not in "leafs"
 initial_stem = True #the algo will initial a stem img using OTSU, else it relies on user input for initializing a stem img
 
-if version_num==13.1:
-    #only runs detect embolism main stage (1st stage) w/o foreground seg and poor qual
-    run_foreground_seg = False #to run the foreground segmentation (extracting stem part) or not
-    run_poor_qual = False
-    run_rolling_window = False
-    run_sep_weak_strong_emb = False
-    run_rm_small_emb = False
-elif version_num==13.2:
-    #runs detect embolism main stage (1st stage) w/foreground seg
-    run_foreground_seg = True #to run the foreground segmentation (extracting stem part) or not
-    run_poor_qual = False
-    run_rolling_window = False
-    run_sep_weak_strong_emb = False
-    run_rm_small_emb = False
-elif version_num==13.3:
-    #runs detect embolism main stage (1st stage) w/foreground seg and poor_qual
-    run_foreground_seg = True #to run the foreground segmentation (extracting stem part) or not
-    run_poor_qual = True
-    run_rolling_window = False
-    run_sep_weak_strong_emb = False
-    run_rm_small_emb = False
-elif version_num==13.4:
-    run_foreground_seg = True #to run the foreground segmentation (extracting stem part) or not
-    run_poor_qual = True
-    run_rolling_window = True
-    run_sep_weak_strong_emb = False
-    run_rm_small_emb = False
-elif version_num==13.5:
-    run_foreground_seg = True #to run the foreground segmentation (extracting stem part) or not
-    run_poor_qual = True
-    run_rolling_window = True
-    run_sep_weak_strong_emb = True
-    run_rm_small_emb = False
-else:
-    run_foreground_seg = True #to run the foreground segmentation (extracting stem part) or not
-    run_poor_qual = True
-    run_rolling_window = True
-    run_sep_weak_strong_emb = True
-    run_rm_small_emb = True
+run_foreground_seg,run_poor_qual,run_rolling_window,run_sep_weak_strong_emb,run_rm_small_emb = get_each_stage_arg(version_num)
 
 folder_list = []
 has_tif = []
@@ -89,7 +53,7 @@ else:
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 
-#for img_folder in all_folders_dir[1:7]:#1:7
+#for img_folder in all_folders_dir[2:5]:#1:7
 img_folder = all_folders_dir[folder_idx_arg]
 
 #Need to process c folder
@@ -942,4 +906,4 @@ else:
                         f.write(str("\n\n"))
                         f.write('img index where proportion of emb. pixels < emb_pro_th_min:\n')
                         f.write(str(treat_as_no_emb_idx+(start_img_idx-1)))
-            
+                
