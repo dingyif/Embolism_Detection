@@ -205,15 +205,16 @@ def extract_foregroundRGB(img_2d,img_re_idx,chunk_folder, blur_radius=10.0,expan
         plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_G_3_is_stem_matG.jpg",is_stem_mat,cmap='gray')
     return(is_stem_mat)#logical 2D array
 
-def foregound_Th_OTSU(img_array, img_re_idx, chunk_folder, blur_radius = 6, expand_radius_ratio = 4, is_save = False, use_max_area = True):
+def foregound_Th_OTSU(img_array, img_re_idx, chunk_folder, unif_radius=20, is_save = False, use_max_area = True):
     '''
     Given the raw img_array and used THRESH+OTSU to segement the foreground and used cc to get the biggest area
     @based on the knowledge that the img is bimodal image (which histogram have 2 peaks)
     '''
+    #unif_radius=15 is too small for c2.2 img_idx=188,190 (emb near stem boundary), so set unif_radius to 20
     #convert color img to grayscale
     gray = cv2.cvtColor(img_array,cv2.COLOR_BGR2GRAY)
     #apply guassian filter to blue the egdes
-    blur = cv2.GaussianBlur(gray,(5,5),0)
+    blur = cv2.GaussianBlur(gray,(5,5),0)#[Diane 0505] is there a reason that set this to 5?
     #apply OSTU threshold to segement the foreground object
     ret, is_stem_mat = cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU) #BINARY_INV CAN BE ANTOHER OPTION
     if use_max_area:
@@ -228,8 +229,9 @@ def foregound_Th_OTSU(img_array, img_re_idx, chunk_folder, blur_radius = 6, expa
             is_stem_mat = is_stem_mat + 1
         #expand the stem part a bit by shrinking the not_stem
         not_stem = -is_stem_mat+1
-        unif_radius = blur_radius*expand_radius_ratio
-        not_stem_exp =  to_binary(ndimage.median_filter(not_stem, size=unif_radius))
+        #unif_radius = blur_radius*expand_radius_ratio#[Diane 0505] 
+        #not_stem_exp =  to_binary(ndimage.median_filter(not_stem, size=unif_radius))#[Diane 0505] median filter to uniform filter
+        not_stem_exp = to_binary(ndimage.uniform_filter(not_stem, size=unif_radius))
         is_stem_mat = (not_stem_exp==0)#invert
         #Another CC because (inglau 1) is seperate from tree bark, and need anthor seperation to take care of the loose part
         num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(is_stem_mat.astype(np.uint8), 8)
@@ -241,8 +243,9 @@ def foregound_Th_OTSU(img_array, img_re_idx, chunk_folder, blur_radius = 6, expa
             is_stem_mat = is_stem_mat + 1
         #expand the stem part a bit by shrinking the not_stem
         not_stem = -is_stem_mat+1
-        unif_radius = blur_radius*expand_radius_ratio
-        not_stem_exp =  to_binary(ndimage.median_filter(not_stem, size=unif_radius))
+        #unif_radius = blur_radius*expand_radius_ratio#[Diane 0505] 
+        #not_stem_exp =  to_binary(ndimage.median_filter(not_stem, size=unif_radius))#[Diane 0505] median filter to uniform filter
+        not_stem_exp = to_binary(ndimage.uniform_filter(not_stem, size=unif_radius))
         is_stem_mat = (not_stem_exp==0)#invert
 
      #plot_gray_img(is_stem+not_stem)#expansion
