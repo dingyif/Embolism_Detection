@@ -570,9 +570,56 @@ else:
     print("1st stage done")
     '''2nd stage: reduce false positive'''
     if is_stem==True:
+        final_stack21 = np.copy(final_stack1)
+        if run_rm_big_emb==True:
+            '''
+            if there's at least one cc too wide, big area, and dense in bounding box --> flag as poor quality (poor_qual_set2)
+            and treat as if no emb
+            usually happens when there are shifting and predicted as embolism
+            (ex: c5_stem 2~9)
+            '''
+            poor_qual_set2 =[]
+            
+            
+            if is_flip==True:#flip for the special horizontal img:
+                middle_row = np.where(is_stem_mat2[0,:,round(img_ncol/2)])[0]#take the middle row(in case top/bottom of stem isn't correctly detected cuz of bark)
+            else:#normal direction
+                middle_row = np.where(is_stem_mat2[0,round(img_nrow/2),:])[0]#take the middle row(in case top/bottom of stem isn't correctly detected cuz of bark)
+            stem_est_width1 = middle_row[-1]-middle_row[0]+1#an estimate of stem_width based on the middle row of is_stem_mat2 1st img
+            stem_est_area1 = np.sum(is_stem_mat2[0,:,:])#stem area of 1st img
+            
+            for img_idx in range(0, final_stack21.shape[0]):
+                current_img = final_stack1[img_idx,:,:]
+                if np.sum(current_img)>0:
+            #        img_ero = cv2.erode(current_img.astype(np.uint8), np.ones((second_ero_kernel_sz,second_ero_kernel_sz),np.uint8),iterations = 1)#erose to seperate embolism from noises
+            #        if plot_interm == True:
+            #            plot_gray_img(img_ero,str(img_idx)+"_img_ero")
+                    #density_img_exp = cv2.closing(density_img_ero.astype(np.uint8), ,np.uint8),iterations = 1)#expand to connect
+                    img_clo = cv2.morphologyEx(current_img.astype(np.uint8), cv2.MORPH_CLOSE, np.ones((second_clo_kernel_sz,second_clo_kernel_sz),np.uint8))
+                    if plot_interm == True:
+                        plot_gray_img(img_clo,str(img_idx)+"_img_clo")
+                    num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(img_clo.astype(np.uint8), 8)#8-connectivity
+                    
+                    
+                    #TODO: not sure if this is the correct direction for the special horiz. imgs
+                    #first two arg: total number of cc, mat with same input size that labels each cc
+                    cc_width = stats[1:,cv2.CC_STAT_WIDTH]#"1:", ignore bgd:0
+                    cc_height = stats[1:,cv2.CC_STAT_HEIGHT]
+                    cc_area = stats[1:, cv2.CC_STAT_AREA]
+                    #largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
+                    
+                    cc_area_too_big = cc_area/stem_est_area1 > second_area_max
+                    cc_too_wide = cc_width/stem_est_width1 > second_width_max
+                    cc_high_dens_in_rect = cc_area/(cc_width*cc_height) > second_rect_dens_max
+                    #cas2.2 img_idx=193 (true emb) the top bark is wide (0.93) and high dens, so need area
+                    #cas2.2 img_idx=6 (false pos) is wide prop (>1) and big area prop (0.239) and high dens (0.425)
+                    #cas2.2 img_idx=213 (true emb) is wide prop (>1) and big area proportion (0.22) but density of cc in bounding box is small (0.26)
+                    if np.any(cc_too_wide*cc_high_dens_in_rect*cc_area_too_big):
+                        poor_qual_set2.append(img_idx)
+                        final_stack21[img_idx,:,:]=mat_cc*0
+                        if plot_interm==True:
+                            print(img_idx," in poor_qual_set2")
         if run_rolling_window==True:
-            final_stack21 = np.copy(final_stack1)
-        
             '''
             Don't count as embolism if it keeps appearing (probably is plastic cover) (rolling window)
             '''
@@ -885,6 +932,10 @@ else:
                         f.write(str("\n\n"))
                         f.write('img index in poor_qual_set1:\n')
                         f.write(str(poor_qual_set1+(start_img_idx-1)))
+                    if run_rm_big_emb==True:
+                        f.write(str("\n\n"))
+                        f.write('img index in poor_qual_set2 (emb too big):\n')
+                        f.write(str(np.asarray(poor_qual_set2)+(start_img_idx-1)))
                     if run_sep_weak_strong_emb==True:
                         f.write(str("\n\n"))
                         f.write(f'geo_invalid_emb_set:{geo_invalid_emb_set}\n')
@@ -919,6 +970,10 @@ else:
                         f.write('img index in poor_qual_set1:\n')
                         f.write(str(poor_qual_set1+(start_img_idx-1)))
                         f.write(str("\n\n"))
+                    if run_rm_big_emb==True:
+                        f.write(str("\n\n"))
+                        f.write('img index in poor_qual_set2 (emb too big):\n')
+                        f.write(str( np.asarray(poor_qual_set2)+(start_img_idx-1)))
                     if run_sep_weak_strong_emb==True:
                         f.write(f'geo_invalid_emb_set:{geo_invalid_emb_set}\n')
                         f.write(f'cleaned_but_not_all_geo_invalid_set:{cleaned_but_not_all_geo_invalid_set}\n\n')
@@ -929,3 +984,4 @@ else:
                         f.write(str("\n\n"))
                         f.write('img index where proportion of emb. pixels < emb_pro_th_min:\n')
                         f.write(str(treat_as_no_emb_idx+(start_img_idx-1)))
+                
