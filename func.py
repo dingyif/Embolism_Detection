@@ -214,7 +214,7 @@ def foregound_Th_OTSU(img_array, img_re_idx, chunk_folder, unif_radius=20, is_sa
     #convert color img to grayscale
     gray = cv2.cvtColor(img_array,cv2.COLOR_BGR2GRAY)
     #apply guassian filter to blue the egdes
-    blur = cv2.GaussianBlur(gray,(5,5),0)#[Diane 0505] is there a reason that set this to 5?
+    blur = cv2.GaussianBlur(gray,(5,5),0)
     #apply OSTU threshold to segement the foreground object
     ret, is_stem_mat = cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU) #BINARY_INV CAN BE ANTOHER OPTION
     if use_max_area:
@@ -229,8 +229,6 @@ def foregound_Th_OTSU(img_array, img_re_idx, chunk_folder, unif_radius=20, is_sa
             is_stem_mat = is_stem_mat + 1
         #expand the stem part a bit by shrinking the not_stem
         not_stem = -is_stem_mat+1
-        #unif_radius = blur_radius*expand_radius_ratio#[Diane 0505] 
-        #not_stem_exp =  to_binary(ndimage.median_filter(not_stem, size=unif_radius))#[Diane 0505] median filter to uniform filter
         not_stem_exp = to_binary(ndimage.uniform_filter(not_stem, size=unif_radius))
         is_stem_mat = (not_stem_exp==0)#invert
         #Another CC because (inglau 1) is seperate from tree bark, and need anthor seperation to take care of the loose part
@@ -243,8 +241,6 @@ def foregound_Th_OTSU(img_array, img_re_idx, chunk_folder, unif_radius=20, is_sa
             is_stem_mat = is_stem_mat + 1
         #expand the stem part a bit by shrinking the not_stem
         not_stem = -is_stem_mat+1
-        #unif_radius = blur_radius*expand_radius_ratio#[Diane 0505] 
-        #not_stem_exp =  to_binary(ndimage.median_filter(not_stem, size=unif_radius))#[Diane 0505] median filter to uniform filter
         not_stem_exp = to_binary(ndimage.uniform_filter(not_stem, size=unif_radius))
         is_stem_mat = (not_stem_exp==0)#invert
 
