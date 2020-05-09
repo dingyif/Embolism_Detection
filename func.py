@@ -205,6 +205,34 @@ def extract_foregroundRGB(img_2d,img_re_idx,chunk_folder, blur_radius=10.0,expan
         plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_G_3_is_stem_matG.jpg",is_stem_mat,cmap='gray')
     return(is_stem_mat)#logical 2D array
 
+def unimodality_dip_test(path:str, plot_show = False) -> bool:
+    '''
+    #http://www.nicprice.net/diptest/Hartigan_1985_AnnalStat.pdf
+    #https://github.com/BenjaminDoran/unidip
+    Given the image and conduct dip test to see whether it's unimodal or not.
+    @path: image path
+    @plot_show: see whether plot the histogram or not
+    '''
+    img = cv2.imread(path,0)
+    img_array = img.ravel() 
+    #input an array
+    #return True if its unimodal distributed
+    data = np.msort(img_array)
+    #the probability of unimodal
+    uni_prob = dip.diptst(data)[1]
+    if uni_prob > 0.5:
+        print(f'This image is unimodel distributed with probability of {uni_prob*100:.2f} %')
+        unimodality = True
+    else:
+        print(f'This image is at least bimodel distributed with probability of {(1-uni_prob)*100:.2f} %')
+        unimodality = False
+    if plot_show:
+        plt.figure()
+        sns.distplot(img.ravel(), bins=256,kde= True, hist = True)
+        plt.title('Histogram of the image')
+        plt.show()
+    return unimodality
+    
 def foregound_Th_OTSU(img_array, img_re_idx, chunk_folder, unif_radius=20, is_save = False, use_max_area = True):
     '''
     Given the raw img_array and used THRESH+OTSU to segement the foreground and used cc to get the biggest area
