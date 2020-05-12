@@ -32,7 +32,7 @@ chunk_size = 200#the number of imgs to process at a time #try to be a multiple o
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
 plot_interm = False
-version_num = 11.007
+version_num = 11.006
 #the third digit after decimal point would be used to determine the run argument for each stage
 resize = False
 
@@ -766,6 +766,14 @@ else:
         print("imgs where proportion of emb. pixels < emb_pro_th_min: ",treat_as_no_emb_idx)
         print("2nd stage done")
     
+    '''
+    median filter on final_stack/255*th_stack --> binarize
+    '''
+    median_kernel_sz2 = 3
+    final_median = median_filter_stack(final_stack/255*th_stack,median_kernel_sz2)
+    #convert final_stack from (0,255) tp (0,1): (0 bgd, 1 emb), have to multiply th_stack before median_filter, else there'll be too many 0 (cuz final_stack is binary, not cont)
+    final_median_bin = to_binary(final_median)*255
+    
     #time
     print_used_time(start_time)
     
@@ -777,9 +785,9 @@ else:
         true_mask = true_mask[tm_start_img_idx:tm_end_img_idx,:,:]
         if resize:
         	true_mask = mat_reshape(true_mask, height = img_height, width = img_width)
-        combined_list = (true_mask,final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
+        combined_list = (true_mask,final_median_bin.astype(np.uint8),final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
     else:
-        combined_list = (final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
+        combined_list = (final_median_bin.astype(np.uint8),final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
     
     final_combined = np.concatenate(combined_list,axis=2)
     final_combined_inv =  -final_combined+255 #invert 0 and 255 s.t. background becomes white
@@ -789,6 +797,9 @@ else:
     if is_save==True:
         tiff.imsave(chunk_folder+'/predict.tif',255-final_stack.astype(np.uint8))
         tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
+        tiff.imsave(chunk_folder+'/median_filter.tif',255-(filter_stack).astype(np.uint8))
+        tiff.imsave(chunk_folder+'/bin_median_filter.tif',255-(to_binary(filter_stack)*255).astype(np.uint8))
+        tiff.imsave(chunk_folder+'/predict_bin_med.tif',255-final_median_bin.astype(np.uint8))
         if is_stem == True and run_sep_weak_strong_emb==True:
             tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo.tif',255-final_stack_prev_stage.astype(np.uint8))
             if version_num >= 11:
