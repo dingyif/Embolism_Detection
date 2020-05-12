@@ -53,8 +53,16 @@ def get_each_stage_arg(version_num):
         run_rm_big_emb = True
         run_rolling_window = True
         run_sep_weak_strong_emb = True
-        run_rm_small_emb = False 
-    elif (version_num*1000) % 10==7:
+        run_rm_small_emb = False
+    elif (version_num*1000) % 10==7:#7 is actually the same as else, but use 7 s.t. 
+        #comparison with others are in the case where there's only one changed at a time
+        run_foreground_seg = True 
+        run_poor_qual = True
+        run_rm_big_emb = True
+        run_rolling_window = True
+        run_sep_weak_strong_emb = True
+        run_rm_small_emb = True
+    elif (version_num*1000) % 10==8:#not 7 because has 2 differences compared with 6
         run_foreground_seg = True 
         run_poor_qual = True
         run_rm_big_emb = True
