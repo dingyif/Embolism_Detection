@@ -69,6 +69,13 @@ def get_each_stage_arg(version_num):
         run_rolling_window = False
         run_sep_weak_strong_emb = True
         run_rm_small_emb = True
+    elif (version_num*1000) % 10==9:
+        run_foreground_seg = True 
+        run_poor_qual = True
+        run_rm_big_emb = False
+        run_rolling_window = False
+        run_sep_weak_strong_emb = True
+        run_rm_small_emb = True
     else:
         run_foreground_seg = True 
         run_poor_qual = True

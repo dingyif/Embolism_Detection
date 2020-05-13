@@ -638,7 +638,7 @@ else:
             emb_cand_stack = np.repeat(emb_cand_each_img1[:,:,np.newaxis],final_stack.shape[2],2)
             final_stack = emb_cand_stack*final_stack
         else:#run_rolling_window==False
-            final_stack = np.copy(final_stack1)
+            final_stack = np.copy(final_stack21)
 
         if run_sep_weak_strong_emb==True:
             '''
