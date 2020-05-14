@@ -97,7 +97,7 @@ def get_pixel_pos_and_cc_from_imgs(input_tiff,emb_img_idx_plot,cc_min_area,cc_mi
         cc_min_area: first min area threshold for cc (larger than cc_min_area2)
         cc_min_area2: smaller min area threshold for cc, in case there's no cc with area > cc_min_area.
     output:
-        plot_mat_all: dataframe with 9 columns including pixel positions of embolism, embolism index (in img and cc levle), and basic shape info for cc
+        plot_mat_all: dataframe with 9 columns including pixel positions of embolism, embolism index (in img and cc level), and basic shape info for cc
         haven't adjusted for tiltness yet
     '''
     num_emb = 1#num_emb: (embolism index at img level), starts at 1
@@ -316,7 +316,7 @@ def do_pca(X, row_num, col_num, to_plot=False):
         fig, ax = plt.subplots(figsize = (5,5))
         ax.set_xlim(0, col_num)
         ax.set_ylim(0, row_num)
-        plt.scatter(X[:,0], X[:,1], alpha=0.2)
+        plt.scatter(X[:,0], X[:,1], alpha=0.2)#if there's TypeError: '(slice(None, None, None), 0)' is an invalid key, change to "iloc" i.e. plt.scatter(X.iloc[:,0], X.iloc[:,1], alpha=0.2)
         for length, vector in zip(pca.explained_variance_, pca.components_):
             scale_magnitude_tmp = np.sqrt(length)
             if scale_magnitude_tmp < min(row_num,col_num)/20:
@@ -363,12 +363,12 @@ def get_upright_mat(plot_mat_time, row_num,col_num,inv_c):
             #Not sure....
             #pivot_center = np.array((np.mean(plot_mat_time['col']),np.mean(plot_mat_time['row']))) #stem center
             #pivot_center = pca.mean_ #(which is the center of c.c.)
-            if inv_c:#stem curvedlike inverse c
+            if inv_c:#stem curved like inverse c
                 if sin_theta*cos_theta>=0: # quadrant I & III
                     pivot_center = np.array((max(X['col']),max(X['row'])))#top right 
                 else: # quadrant II&IV
                     pivot_center = np.array((max(X['col']),min(X['row'])))#bottom right
-            else:
+            else:#stem curved like c
                 if sin_theta*cos_theta>=0: # quadrant I & III
                     pivot_center = np.array((min(X['col']),min(X['row'])))#bottom left
                 else: # quadrant II&IV
