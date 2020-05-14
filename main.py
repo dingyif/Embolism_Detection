@@ -13,6 +13,7 @@ from func import add_img_info_to_stack, extract_foregroundRGB,foreground_B,mat_r
 from func import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set, remove_cc_by_geo, rescue_weak_emb_by_dens
 from func import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
 from func import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric,print_used_time, foregound_Th_OTSU
+from func import unimodality_dip_test
 from density import density_of_a_rect
 from detect_by_filter_fx import median_filter_stack
 from supplement_func import get_each_stage_arg
@@ -23,7 +24,7 @@ start_time = datetime.datetime.now()
 '''
 user-specified arguments
 '''
-folder_idx_arg = 3
+folder_idx_arg = 36
 #disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 disk_path = 'E:/Diane/Col/research/code/'
 has_processed = True#Working on Processed data or Unprocessed data
@@ -32,7 +33,7 @@ chunk_size = 200#the number of imgs to process at a time #try to be a multiple o
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
 plot_interm = False
-version_num = 11.006
+version_num = 13.0
 #the third digit after decimal point would be used to determine the run argument for each stage
 resize = False
 
@@ -279,15 +280,30 @@ else:
             #be more consservative about shifting, else error accumulation...
             shift_px_min = 0
             shift_ratio = 0.95
+            first_img_path = img_paths[(start_img_idx-1):end_img_idx][0]
             if initial_stem:
-                #initial the stem area for the first img of the chunk size
-                frist_img_array = cv2.imread(img_paths[(start_img_idx-1):end_img_idx][0])
-                is_stem_mat_init = foregound_Th_OTSU(frist_img_array,img_re_idx = 1,chunk_folder = chunk_folder)
-                if not os.path.exists(os.path.join(img_folder,"input")):#create new folder if not existed
-                    os.makedirs(os.path.join(img_folder,"input"))#create the folder to save stem_OTSU.jpg
-                first_stem_filename = "stem_OTSU.jpg"
-                plt.imsave(img_folder + "/input" + "/"+first_stem_filename,is_stem_mat_init,cmap='gray')
-                print('stem.jpg is successfully initialized')
+                #check unimodality of the stem distribution 
+                #if it is, then use GREEN layer to initial stem jpg.
+                if unimodality_dip_test(first_img_path):
+                    #initial the stem area for the first img of the chunk size
+                    imgRGB_arr=np.float32(Image.open(first_img_path))#RGB image to numpy array
+                    imgGarray = imgRGB_arr[:,:,1] #only look at G layer
+                    is_stem_mat_init = extract_foregroundRGB(imgGarray_resize,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=False,use_max_area=True)
+                    if not os.path.exists(os.path.join(img_folder,"input")):#create new folder if not existed
+                        os.makedirs(os.path.join(img_folder,"input"))#create the folder to save stem_OTSU.jpg
+                    first_stem_filename = "stem_green.jpg"
+                    plt.imsave(img_folder + "/input" + "/"+first_stem_filename,is_stem_mat_init,cmap='gray')
+                    print('G_stem.jpg is successfully initialized')
+                else:
+                    #read the first img
+                    frist_img_array = cv2.imread(first_img_path)
+                    #compute the stem mask ndarray
+                    is_stem_mat_init = foregound_Th_OTSU(frist_img_array,img_re_idx = 1,chunk_folder = chunk_folder)
+                    if not os.path.exists(os.path.join(img_folder,"input")):#create new folder if not existed
+                        os.makedirs(os.path.join(img_folder,"input"))#create the folder to save stem_OTSU.jpg
+                    first_stem_filename = "stem_OTSU.jpg"
+                    plt.imsave(img_folder + "/input" + "/"+first_stem_filename,is_stem_mat_init,cmap='gray')
+                    print('OTSU_stem.jpg is successfully initialized')
             else:#user-input jpg
                 first_stem_filename = "stem.jpg"
             
