@@ -23,6 +23,8 @@ from collections import Counter#for count 1,2 in overlap mat
 import seaborn as sns
 import datetime
 import scipy.signal
+from unidip import UniDip#for unimodality_dip_test
+import unidip.dip as dip#for unimodality_dip_test
 #############################################################################
 #    Sanity check:
 #    see if the sum of pixel values in an image of diff_pos_stack
