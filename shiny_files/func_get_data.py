@@ -202,22 +202,23 @@ def get_date_time_from_filenames(all_files,img_extension):
     i.e. convert '20190725-103910.png' to '2019-07-25 10:39:10' 
     given a list of all filenames(all_files) and file extension(img_extension)
     '''
-    date_time_list = list()
+    #date_time_list = list()
     
-    for file in all_files:
-        time_str = file.split(img_extension)[0]
+    #for file in all_files:
+    #    time_str = file.split(img_extension)[0]
         #put all year month day in formate
-        Year = time_str[0:4]
-        Month = time_str[4:6]
-        Day =  time_str[6:8]
-        YMD = '-'.join([Year,Month,Day])
-        Hour = time_str[9:11]
-        Minute = time_str[11:13]
-        Secs =  time_str[13:15]
-        HMS = ':'.join([Hour,Minute,Secs])
-        date_time = ' '.join([YMD,HMS])
-        date_time_list.append(date_time)
-    
+    #    Year = time_str[0:4]
+    #    Month = time_str[4:6]
+    #    Day =  time_str[6:8]
+    #    YMD = '-'.join([Year,Month,Day])
+    #    Hour = time_str[9:11]
+    #    Minute = time_str[11:13]
+    #    Secs =  time_str[13:15]
+    #    HMS = ':'.join([Hour,Minute,Secs])
+    #    date_time = ' '.join([YMD,HMS])
+    #    date_time_list.append(date_time)
+    time_str_list = [file.split(img_extension)[0] for file in all_files]
+    date_time_list = [datetime.datetime.strptime(dt_str,'%Y%m%d-%H%M%S') for dt_str in time_str_list]
     return(date_time_list)
 
 def get_time_wrt_start_time(date_time_list_ori,num_imgs,emb_num_plot,emb_img_idx_plot):
@@ -228,11 +229,12 @@ def get_time_wrt_start_time(date_time_list_ori,num_imgs,emb_num_plot,emb_img_idx
     #compute the relative time wrt to starting time(1st img)
     second_img_date_time = date_time_list_ori[1:(num_imgs+1)]#[Diane] one image later than Dingyi's
     start_time = date_time_list_ori[0]
-    diff_time_list = list()
-    for date_time in second_img_date_time:
-      diff_time = datetime.datetime.strptime(date_time, '%Y-%m-%d %H:%M:%S') - datetime.datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
-      diff_time_in_min = diff_time.total_seconds() / 60#can be float number
-      diff_time_list.append(diff_time_in_min)
+    #change the different
+    diff_time_list = [(end_dt - start_time).total_seconds()/60 for end_dt in second_img_date_time]
+    #for date_time in second_img_date_time:
+    #  diff_time = datetime.datetime.strptime(date_time, '%Y-%m-%d %H:%M:%S') - datetime.datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
+    #  diff_time_in_min = diff_time.total_seconds() / 60#can be float number
+    #  diff_time_list.append(diff_time_in_min)
     
     diff_time_list_int = [math.floor(float(x)) for x in diff_time_list]
     #put in the data frame to show table
