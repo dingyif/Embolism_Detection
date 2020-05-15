@@ -24,7 +24,7 @@ start_time = datetime.datetime.now()
 '''
 user-specified arguments
 '''
-folder_idx_arg = 36
+folder_idx_arg = 3
 #disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 disk_path = 'E:/Diane/Col/research/code/'
 has_processed = True#Working on Processed data or Unprocessed data
@@ -288,7 +288,7 @@ else:
                     #initial the stem area for the first img of the chunk size
                     imgRGB_arr=np.float32(Image.open(first_img_path))#RGB image to numpy array
                     imgGarray = imgRGB_arr[:,:,1] #only look at G layer
-                    is_stem_mat_init = extract_foregroundRGB(imgGarray_resize,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=False,use_max_area=True)
+                    is_stem_mat_init = extract_foregroundRGB(imgGarray,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=False,use_max_area=True)
                     if not os.path.exists(os.path.join(img_folder,"input")):#create new folder if not existed
                         os.makedirs(os.path.join(img_folder,"input"))#create the folder to save stem_OTSU.jpg
                     first_stem_filename = "stem_green.jpg"
@@ -812,8 +812,8 @@ else:
         
     if is_save==True:
         tiff.imsave(chunk_folder+'/predict.tif',255-final_stack.astype(np.uint8))
-        tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
-        tiff.imsave(chunk_folder+'/median_filter.tif',255-(filter_stack).astype(np.uint8))
+        #tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
+        #tiff.imsave(chunk_folder+'/median_filter.tif',255-(filter_stack).astype(np.uint8))
         tiff.imsave(chunk_folder+'/bin_median_filter.tif',255-(to_binary(filter_stack)*255).astype(np.uint8))
         tiff.imsave(chunk_folder+'/predict_bin_med.tif',255-final_median_bin.astype(np.uint8))
         if is_stem == True and run_sep_weak_strong_emb==True:
