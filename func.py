@@ -83,7 +83,7 @@ def plot_gray_img(gray_img,title_str=""):
 
 def to_binary(img_stack):
     #convert 0 to 0(black) and convert all postivie pixel values to 1(white)
-    return((img_stack > 0)*1)
+    return((img_stack > 0)*1.0)
 
 #############################################################################
 #    Foreground Background Segmentation

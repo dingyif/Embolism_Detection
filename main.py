@@ -39,6 +39,7 @@ resize = False
 
 #only incoorporated in "stem", not in "leafs"
 initial_stem = True #the algo will initial a stem img using OTSU, else it relies on user input for initializing a stem img
+resize_output = True #shrink to 1/3 of img_width,img_height
 
 run_foreground_seg,run_poor_qual,run_rm_big_emb,run_rolling_window,run_sep_weak_strong_emb,run_rm_small_emb = get_each_stage_arg(version_num)
 
@@ -520,8 +521,6 @@ else:
                 combined_list_bubble = ((bubble_stack*255).astype(np.uint8),(filter_norm*255).astype(np.uint8),(bin_stack*255).astype(np.uint8))
                 bubble_combined = np.concatenate(combined_list_bubble,axis=2)
                 bubble_combined_inv =  -bubble_combined+255#so that bubbles: white --> black, bgd: black-->white
-                tiff.imsave(chunk_folder+'/bubble_stack.tif', bubble_combined_inv)
-                print("saved bubble_stack.tif")
                 
                 has_bubble_idx = np.where(has_bubble_vec==1)[0]
                 has_bubble_per = round(100*len(has_bubble_idx)/(img_num-1),2)
@@ -811,17 +810,40 @@ else:
     final_combined_inv_info = add_img_info_to_stack(final_combined_inv,img_paths,start_img_idx)
         
     if is_save==True:
+
+        if resize_output==True:
+            '''
+            shrink output tif by 1/3 (preserving the height-width ratio)
+            '''
+            img_height_out = round(img_height/3)
+            img_width_out = round(img_width/3)
+            true_mask = mat_reshape(true_mask, height = img_height_out, width = img_width_out)#have to be the same size as final_Stack for confusion_mat_pixel(
+            final_stack = mat_reshape(final_stack, height = img_height_out, width = img_width_out)
+            bin_stack = bin_stack.astype(np.uint8)#convert from str to uint8
+            bin_stack = mat_reshape(bin_stack, height = img_height_out, width = img_width_out)
+            filter_stack = mat_reshape(filter_stack, height = img_height_out, width = img_width_out)
+            final_median_bin = mat_reshape(final_median_bin, height = img_height_out, width = img_width_out)
+            if is_stem == True and run_sep_weak_strong_emb==True:
+                final_stack_prev_stage = mat_reshape(final_stack_prev_stage, height = img_height_out, width = img_width_out)
+                if version_num >= 11:
+                    final_stack_strong_emb_cand = mat_reshape(final_stack_strong_emb_cand, height = img_height_out, width = img_width_out)
+                if version_num >= 9.9:
+                    weak_emb_stack = mat_reshape(weak_emb_stack, height = img_height_out, width = img_width_out)
+        
         tiff.imsave(chunk_folder+'/predict.tif',255-final_stack.astype(np.uint8))
         #tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
         #tiff.imsave(chunk_folder+'/median_filter.tif',255-(filter_stack).astype(np.uint8))
         tiff.imsave(chunk_folder+'/bin_median_filter.tif',255-(to_binary(filter_stack)*255).astype(np.uint8))
         tiff.imsave(chunk_folder+'/predict_bin_med.tif',255-final_median_bin.astype(np.uint8))
-        if is_stem == True and run_sep_weak_strong_emb==True:
-            tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo.tif',255-final_stack_prev_stage.astype(np.uint8))
-            if version_num >= 11:
-                tiff.imsave(chunk_folder+'/stc_predict.tif',255-final_stack_strong_emb_cand.astype(np.uint8))
-            if version_num >= 9.9:
-                tiff.imsave(chunk_folder+'/weak_emb_stack.tif',255-weak_emb_stack.astype(np.uint8))
+        if is_stem == True:
+            if run_sep_weak_strong_emb==True:
+                tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo.tif',255-final_stack_prev_stage.astype(np.uint8))
+                if version_num >= 11:
+                    tiff.imsave(chunk_folder+'/stc_predict.tif',255-final_stack_strong_emb_cand.astype(np.uint8))
+                if version_num >= 9.9:
+                    tiff.imsave(chunk_folder+'/weak_emb_stack.tif',255-weak_emb_stack.astype(np.uint8))
+            if run_poor_qual==True:
+                tiff.imsave(chunk_folder+'/bubble_stack.tif', bubble_combined_inv)
             #tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo_small.tif',255-before_rm_cc_geo_stack_small.astype(np.uint8))
         tiff.imsave(chunk_folder+'/combined_4.tif', final_combined_inv_info)
         print("saved tif files")
