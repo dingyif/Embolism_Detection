@@ -224,7 +224,11 @@ def get_date_time_from_filenames(all_files,img_extension):
     #    date_time = ' '.join([YMD,HMS])
     #    date_time_list.append(date_time)
     time_str_list = [file.split(img_extension)[0] for file in all_files]
-    date_time_list = [datetime.datetime.strptime(dt_str,'%Y%m%d-%H%M%S') for dt_str in time_str_list]
+    if 'tl' in time_str_list[0]:
+        time_str_clean_ls = ['-'.join(time_str.split('_')[-2:]) for time_str in time_str_list]
+        date_time_list = [datetime.datetime.strptime(dt_str,'%Y%m%d-%H%M%S') for dt_str in time_str_clean_ls]
+    else:
+        date_time_list = [datetime.datetime.strptime(dt_str,'%Y%m%d-%H%M%S') for dt_str in time_str_list]
     return(date_time_list)
 
 def get_time_wrt_start_time(date_time_list_ori,num_imgs,emb_num_plot,emb_img_idx_plot):
