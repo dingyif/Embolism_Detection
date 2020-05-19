@@ -177,7 +177,7 @@ def extract_by_index_list(data,index_list,to_array):
         output = np.asarray(output)
     return(output)
 
-def get_img_filenames(img_folder):
+def get_img_filenames(img_folder,ignore_filename='preview'):
     '''
     get a list of filenames under img_folder with filenames ending with ".png" or ".jpg"
     also return the file extension
@@ -187,12 +187,14 @@ def get_img_filenames(img_folder):
     img_extension = ""
     for file in sorted(os.listdir(img_folder)):
         if file.endswith(".png"):
-            all_files.append(file)
+            if file!=ignore_filename+".png":#skip the files named with ignore_filename
+                all_files.append(file)
     
     if all_files==[]:
         for file in sorted(os.listdir(img_folder)):
             if file.endswith(".jpg"):
-                all_files.append(file)
+                if file!=ignore_filename+".jpg":#skip the files named with ignore_filename
+                    all_files.append(file)
     else:#all_files isn't empty
         img_extension = ".png"
     
