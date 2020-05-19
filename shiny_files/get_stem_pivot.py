@@ -19,21 +19,19 @@ def plot_gray_img(gray_img,title_str=""):
     plt.imshow(gray_img,cmap='gray')
     plt.title(title_str)
 
-def get_pivot_center(stem_path,plot_interm): 
+def get_pivot_center(stem_arr,plot_interm): 
     '''
-    Determine the pivot center from an input stem segmentation image (white: stem, black background) (stem_path)
+    Determine the pivot center from a array that indicates which part is stem (pixel value = prob. of that pixel being stem, ex: 1: stem, 0: background) 
     using fitting of 2nd degree polynomial
     if the stem isn't curved, it should output the bottomest point
     '''
-    #stem_path = 'E:/Diane/Col/research/code/Done/Processed/version_output/v11/inglau3_stem.DONEGOOD.HANNAH.11.22/v11_0_1_200/m_3_is_stem_mat2_0.jpg'
-    stem_img0=Image.open(stem_path).convert('L') #.convert('L'): gray-scale # 646x958
-    stem_arr0 = np.float32(stem_img0)/255 #convert to array and {0,255} --> {0,1}
-    row_num = stem_arr0.shape[0]#img height
-    col_num = stem_arr0.shape[1]#img width
     
-    plot_gray_img(stem_arr0)
+    row_num = stem_arr.shape[0]#img height
+    col_num = stem_arr.shape[1]#img width
     
-    smooth_stem = ndimage.gaussian_filter(stem_arr0, sigma = 10)
+    plot_gray_img(stem_arr)
+    
+    smooth_stem = ndimage.gaussian_filter(stem_arr, sigma = 10)
     bin_smooth_stem = (smooth_stem>0.5).astype(np.uint8)
     num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(bin_smooth_stem, 8)
     centroid_col = centroids[1][0]#centroids[0] is bgd, centroids[1] is stem
@@ -126,7 +124,7 @@ def get_pivot_center(stem_path,plot_interm):
             pivot_col_pos = centroid_col
             pivot_row_pos = centroid_row
         else:
-            pivot_row_pos = max(np.where(stem_arr0==1)[0])#bottomest pt
+            pivot_row_pos = max(np.where(stem_arr==1)[0])#bottomest pt's row position ([0]: row index; [1]:col index)
     elif second_order_coeff>near_0_threshold:
         is_2_deg = True
         min_col_idx = np.where(fitted_y == min(fitted_y))[0][0]
@@ -139,7 +137,7 @@ def get_pivot_center(stem_path,plot_interm):
     #assume the stem contours are parallel
     #use the mean of the column index of stem on the row slice (pivot's row position) for pivot's column index
     if is_2_deg==True or use_centroid==False:
-        col_idx_is_stem = np.where(stem_arr0[pivot_row_pos,:]==1)[0]#get all the col index where row_index == pivot_row_pos AND is stem
+        col_idx_is_stem = np.where(stem_arr[pivot_row_pos,:]==1)[0]#get all the col index where row_index == pivot_row_pos AND is stem
         pivot_col_pos = int(np.round(np.mean(col_idx_is_stem)))
     
     if plot_interm==True:
@@ -162,7 +160,9 @@ def get_pivot_center(stem_path,plot_interm):
     return(pivot_center)
 
 stem_path = 'E:/Diane/Col/research/code/Done/Processed/version_output/v11/inglau3_stem.DONEGOOD.HANNAH.11.22/v11_0_1_200/m_3_is_stem_mat2_0.jpg'
-pivot_center = get_pivot_center(stem_path,plot_interm=True)
+stem_img=Image.open(stem_path).convert('L') #.convert('L'): gray-scale # 646x958
+stem_arr = np.float32(stem_img)/255 #convert to array and {0,255} --> {0,1}
+pivot_center = get_pivot_center(stem_arr,plot_interm=True)
 
 
 
