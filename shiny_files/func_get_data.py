@@ -61,7 +61,7 @@ def get_img_idx_from_one_file(file_path):
     return(img_idx)
 
 
-def get_img_idx_from_all_files(dir_path,plot_fn,plot_fp):
+def get_img_idx_from_txt(dir_path,plot_fn,plot_fp,use_txt=True):
     '''
     input: 
         dir_path: the directory where files are stored at
@@ -89,6 +89,11 @@ def get_img_idx_from_all_files(dir_path,plot_fn,plot_fp):
     emb_num_plot = len(emb_img_idx_plot) #total number of embolism to plot (img level)
     return emb_img_idx_plot,emb_num_plot
 
+def get_img_idx_from_tiff(img_stack):
+    emb_img_idx_plot = np.where(np.any(np.any(img_stack,axis=2),axis=1)*1)[0].tolist()
+    emb_num_plot = len(emb_img_idx_plot)
+    return emb_img_idx_plot,emb_num_plot
+
 def get_pixel_pos_and_cc_from_imgs(input_tiff,emb_img_idx_plot,cc_min_area,cc_min_area2):
     '''
     input:
@@ -111,7 +116,6 @@ def get_pixel_pos_and_cc_from_imgs(input_tiff,emb_img_idx_plot,cc_min_area,cc_mi
         num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(smooth_img_j.astype(np.uint8), 8)#8-connectivity
         #number of c.c., centroids: 2 cols(col,row) 
         
-        #below ignores background
         cc_width = stats[:,cv2.CC_STAT_WIDTH]
         cc_height = stats[:,cv2.CC_STAT_HEIGHT]
         cc_area = stats[:, cv2.CC_STAT_AREA]
@@ -119,7 +123,9 @@ def get_pixel_pos_and_cc_from_imgs(input_tiff,emb_img_idx_plot,cc_min_area,cc_mi
         cc_big_enough_labels = np.where(cc_area[1:]>cc_min_area)[0]#ignore bgd:0
         if cc_big_enough_labels.size > 0:#at least have one cc big enough
             for cc_idx in (cc_big_enough_labels+1):#+1 cuz ignore bgd before
-                row_col_cc = np.transpose(np.nonzero(mat_cc==cc_idx))#matrix: number of pixels in that cc x 2. Two cols: row,col
+                row_col_cc = np.transpose(np.nonzero(mat_cc==cc_idx))#get (row,col) of all pixels in the c.c.
+                #matrix: (number of pixels in that cc) x 2. Two cols: row,col
+                
                 num_px_in_cc = row_col_cc.shape[0]
                 cc_stat = np.array([num_emb,cc_num_emb,cc_width[cc_idx],cc_height[cc_idx],cc_area[cc_idx],centroids[cc_idx][1],centroids[cc_idx][0]], ndmin=2)
                  #-1 cuz some statistics for cc ignores background
@@ -290,6 +296,7 @@ def plot_point_one_emb_or_one_img(points_df,row_num,col_num,cc_num_emb=-1,num_em
         ax.set_title('emb_num: ' + str(num_emb))
     #lets see how points look like 
     _ = plt.plot(sample_point_Z.col, sample_point_Z.row,'o',color='#20639B',alpha = 0.1, markersize = 4)
+            
 
 def plot_point(points_df,xlim,ylim,fig_size=5):
     fig, ax = plt.subplots(figsize = (fig_size,fig_size))
@@ -305,7 +312,7 @@ def draw_vector(v0, v1, ax=None):
                     shrinkA=0, shrinkB=0)
     ax.annotate('', v1, v0, arrowprops=arrowprops)
 
-def do_pca(X, row_num, col_num, to_plot=False):
+def do_pca(X, row_num, col_num, to_plot=False, fig_height=5):
     '''
     do PCA on an pixel position array (X)
     X: shape = number of points x 2 (x:col,y:row)
@@ -315,21 +322,22 @@ def do_pca(X, row_num, col_num, to_plot=False):
     
     if to_plot:
         
-        fig, ax = plt.subplots(figsize = (5,5))
+        fig, ax = plt.subplots(figsize = (math.floor(fig_height/row_num*col_num),fig_height))
         ax.set_xlim(0, col_num)
         ax.set_ylim(0, row_num)
         plt.scatter(X[:,0], X[:,1], alpha=0.2)#if there's TypeError: '(slice(None, None, None), 0)' is an invalid key, change to "iloc" i.e. plt.scatter(X.iloc[:,0], X.iloc[:,1], alpha=0.2)
         for length, vector in zip(pca.explained_variance_, pca.components_):
             scale_magnitude_tmp = np.sqrt(length)
-            if scale_magnitude_tmp < min(row_num,col_num)/20:
-                scale_magnitude =min(row_num,col_num)/20
+            if scale_magnitude_tmp < min(row_num,col_num)/10:#when scale_magnitude_tmp is to small, set the arrow size to min(row_num,col_num)/10
+                scale_magnitude =min(row_num,col_num)/10
             elif scale_magnitude_tmp > min(row_num,col_num)/2:
                 scale_magnitude = min(row_num,col_num)/2
             else:
                 scale_magnitude = scale_magnitude_tmp
             v = vector *scale_magnitude
             draw_vector(pca.mean_, pca.mean_ + v, ax)
-    
+        plt.gca().invert_yaxis()
+        plt.show()
     return pca
 
 def get_upright_mat(plot_mat_time, row_num,col_num,inv_c):

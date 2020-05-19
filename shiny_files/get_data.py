@@ -13,15 +13,19 @@ import func_get_data as fx
 '''
 user-specified input arguments
 '''
-img_dir = os.path.join('..','..')
+#img_dir = os.path.join('..','..')
+img_folder_rel = 'F:/ProcessedImages_0221_from_disk'
+#top directory that stores the folders w/raw image
 has_processed = True
-tif_top_dir = 'F:/server_output/processed'
-version_name = 'v11'
+disk_path = 'F:/ProcessedImages_0221_from_disk'#'F:/server_output/processed/v11' 
+#top directory that determines the folders to look at and also the directory for txt files, if use_txt=True
+output_version_name = 'true_tif'
 output_dir = 'F:/emb_data'
 folder_idx = 0
 
 #use the below arguments and save into different folder for outputs
 use_predict_tif = False #(False):use true labels tif . (True or has_processed=False): use predict.tif 
+use_txt = False #use true_positive,fp,fn txt files for img index
 #default is to plot tp emb.
 plot_fn = True #(TRUE):plot fn emb. from false_positive_index.txt 
 plot_fp = False 
@@ -29,7 +33,7 @@ plot_fp = False
 '''
 Paths
 '''
-disk_path = os.path.join(tif_top_dir,version_name)
+#disk_path = os.path.join(tif_top_dir,version_name)
 all_folders_name = np.sort(os.listdir(disk_path))
 
 all_folders_dir = [os.path.join(disk_path,folder) for folder in all_folders_name]
@@ -39,10 +43,10 @@ dir_path = all_folders_dir_processed[folder_idx]
 folder_name = all_folders_name[folder_idx]#Alclat2_stem.DONEGOOD.HANNAH.9.26
 folder_name_short = folder_name.split(".")[0]#Alclat2_stem
 
-if has_processed==True:
-    img_folder_rel = os.path.join(img_dir,"Done", "Processed")
-else:
-    img_folder_rel = os.path.join(img_dir,"ImagesNotYetProcessed")
+#if has_processed==True:
+#    img_folder_rel = os.path.join(img_dir,"Done", "Processed")
+#else:
+#    img_folder_rel = os.path.join(img_dir,"ImagesNotYetProcessed")
 
 img_folder = os.path.join(img_folder_rel,folder_name)
 
@@ -64,8 +68,10 @@ col_num  = input_tiff.shape[2]
 get emb_img_idx_plot (the image index that have to be plotted) and emb_num_plot (the total number of images to be plotted)
 img_idx starts from 0
 '''
-
-emb_img_idx_plot,emb_num_plot = fx.get_img_idx_from_all_files(dir_path=dir_path,plot_fn=plot_fn,plot_fp=plot_fp)
+if use_txt==True:
+    emb_img_idx_plot,emb_num_plot = fx.get_img_idx_from_txt(dir_path=dir_path,plot_fn=plot_fn,plot_fp=plot_fp)
+else:#use true_tif to get img_idx with emb
+     emb_img_idx_plot,emb_num_plot = fx.get_img_idx_from_tiff(input_tiff)
 
 '''
 Processing the tiff into matrix pixel value
@@ -107,8 +113,8 @@ save plot_mat_time into csv file ('emb_points_time.csv')
 '''
 #create output directory if not existed
 fx.create_or_empty_folder(output_dir, to_empty=False)
-fx.create_or_empty_folder(os.path.join(output_dir,version_name), to_empty=False)
-fx.create_or_empty_folder(os.path.join(output_dir,version_name,folder_name_short), to_empty=False)
+fx.create_or_empty_folder(os.path.join(output_dir,output_version_name), to_empty=False)
+fx.create_or_empty_folder(os.path.join(output_dir,output_version_name,folder_name_short), to_empty=False)
 
 #output folder name based on user-specified arguments
 if use_predict_tif:
@@ -127,7 +133,7 @@ else:
     out_tag3 = 'no_fp'
 
 output_folder_tag = '_'.join((out_tag1,out_tag2,out_tag3))
-output_folder = os.path.join(output_dir,version_name,folder_name_short,output_folder_tag)
+output_folder = os.path.join(output_dir,output_version_name,folder_name_short,output_folder_tag)
 fx.create_or_empty_folder(output_folder, to_empty=False)
 
 #Transform into csv format
