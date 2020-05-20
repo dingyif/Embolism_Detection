@@ -25,9 +25,20 @@ start_time = datetime.datetime.now()
 user-specified arguments
 '''
 folder_idx_arg = 3
-#disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-disk_path = 'E:/Diane/Col/research/code/'
 has_processed = True#Working on Processed data or Unprocessed data
+
+#determine img_folder_rel
+img_folder_rel = ""#subfolder under input_root_folder that stores the folders with input imgs. "" means uses default: Done/Processed or ImagesNotYetProcessed
+if img_folder_rel=="":
+    input_root_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    #input_root_folder = 'E:/Diane/Col/research/code/'#root directory for [img_folder_rel] 
+    if has_processed==True:
+        img_folder_rel = os.path.join(input_root_folder,"Done", "Processed")
+    else:
+        img_folder_rel = os.path.join(input_root_folder,"ImagesNotYetProcessed")
+
+output_root_folder = img_folder_rel#local: chunk_folder's top folder is img_folder_rel; chunk_folder on server isn't
+
 chunk_idx = 0#starts from 0
 chunk_size = 200#the number of imgs to process at a time #try to be a multiple of window_size(200), or else last stage of rolling window doesn't work well
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
@@ -41,6 +52,7 @@ resize = False
 initial_stem = True #the algo will initial a stem img using OTSU, else it relies on user input for initializing a stem img
 resize_output = False #shrink to 1/3 of img_width,img_height
 use_bin_med_clear = True
+ 
 
 if version_num >= 13 and version_num < 14 and initial_stem==False:
     sys.exit("version num is btw 13 to 14, should set initial_stem to True")
@@ -53,10 +65,7 @@ folder_list = []
 has_tif = []
 no_tif =[]
 
-if has_processed==True:
-    img_folder_rel = os.path.join(disk_path,"Done", "Processed")
-else:
-    img_folder_rel = os.path.join(disk_path,"ImagesNotYetProcessed")
+
 
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
@@ -134,7 +143,7 @@ else:
         #create a "folder" for saving resulting tif files such that next time when re-run this program,
         #the resulting tif file won't be viewed as the most recent modified tiff file
         #chunk_folder = os.path.join(img_folder,img_folder_name,'v'+str(version_num)+'_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
-        chunk_folder = os.path.join(img_folder_rel,'version_output','v'+str(version_num),img_folder_name,'v'+str(version_num)+'_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
+        chunk_folder = os.path.join(output_root_folder,'version_output','v'+str(version_num),img_folder_name,'v'+str(version_num)+'_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
         if not os.path.exists(chunk_folder):#create new folder if not existed
             os.makedirs(chunk_folder)
         else:#empty the existing folder
@@ -823,6 +832,7 @@ else:
     create bin_med_clear is essentially binarized filter_stack, but cleared the ones we predicted to have no embolism to an empty img
     might be helpful to Chris
     '''
+
     if use_bin_med_clear == True:
         filter_bin_stack = to_binary(filter_stack)#0 or 1
         bin_med_clear = np.zeros(final_stack.shape)
@@ -859,7 +869,6 @@ else:
             img_height_out = round(img_height/3)
             img_width_out = round(img_width/3)
             true_mask = mat_reshape(true_mask, height = img_height_out, width = img_width_out)#have to be the same size as final_Stack for confusion_mat_pixel(
-        
         if use_bin_med_clear==True:
             combined_list = (true_mask,final_median_bin.astype(np.uint8),(bin_med_clear*255).astype(np.uint8),(bin_stack*255).astype(np.uint8))
         else:

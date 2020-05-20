@@ -26,6 +26,8 @@ for server
 '''
 import argparse
 parser = argparse.ArgumentParser()
+parser.add_argument('--img_folder_rel', type=str, default="")#directory that stores the folders with input imgs. 
+parser.add_argument('--output_root_folder', type = str, default="")
 parser.add_argument('--folder_idx', type=int)
 parser.add_argument('--has_proc', type=int)
 parser.add_argument('--chunk_idx', type=int)
@@ -40,14 +42,33 @@ args = parser.parse_args()
 user-specified arguments (from server input)
 '''
 folder_idx_arg = args.folder_idx
-disk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-#disk_path = 'E:/Diane/Col/research/code/'
+
+#determine has_processed and proc_str (proc_str is used for chunk_folder)
 if args.has_proc==1:
     has_processed = True#Working on Processed data or Unprocessed data
     proc_str = "processed"
-else:
+elif args.has_proc==0:
     has_processed = False
     proc_str = "unprocessed"
+else:
+    sys.exit("has_proc is set to some value not 0 nor 1")
+
+#determine img_folder_rel
+if args.img_folder_rel=="":#"" means uses default: Done/Processed or ImagesNotYetProcessed
+    input_root_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    if has_processed==True:
+        img_folder_rel = os.path.join(input_root_folder,"Done", "Processed")
+    else:
+        img_folder_rel = os.path.join(input_root_folder,"ImagesNotYetProcessed")
+else:
+    img_folder_rel = args.img_folder_rel
+
+#determine output_root_folder
+if args.output_root_folder =="":
+    output_root_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+else:
+    output_root_folder = args.output_root_folder
+
 
 def convert_int_to_boolean(int_value):
     if int_value==1:
@@ -74,11 +95,6 @@ run_foreground_seg,run_poor_qual,run_rm_big_emb,run_rolling_window,run_sep_weak_
 folder_list = []
 has_tif = []
 no_tif =[]
-
-if has_processed==True:
-    img_folder_rel = os.path.join(disk_path,"Done", "Processed")
-else:
-    img_folder_rel = os.path.join(disk_path,"ImagesNotYetProcessed")
 
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
@@ -156,7 +172,7 @@ else:
     if is_save==True:
         #create a "folder" for saving resulting tif files such that next time when re-run this program,
         #the resulting tif file won't be viewed as the most recent modified tiff file
-        chunk_folder = os.path.join(disk_path,'server_output','v'+str(version_num)+"_"+proc_str,img_folder_name,'v'+str(version_num)+'_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
+        chunk_folder = os.path.join(output_root_folder,'server_output','v'+str(version_num)+"_"+proc_str,img_folder_name,'v'+str(version_num)+'_'+str(chunk_idx)+'_'+str(start_img_idx)+'_'+str(end_img_idx))
         if not os.path.exists(chunk_folder):#create new folder if not existed
             os.makedirs(chunk_folder)
         else:#empty the existing folder
