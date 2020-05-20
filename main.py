@@ -33,7 +33,7 @@ chunk_size = 200#the number of imgs to process at a time #try to be a multiple o
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
 plot_interm = False
-version_num = 13.1
+version_num = 13.0
 #the third digit after decimal point would be used to determine the run argument for each stage
 resize = False
 
