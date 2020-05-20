@@ -33,7 +33,7 @@ chunk_size = 200#the number of imgs to process at a time #try to be a multiple o
 #don't use 4,5, or else tif would be saved as rgb colored : https://stackoverflow.com/questions/48911162/python-tifffile-imsave-to-save-3-images-as-16bit-image-stack
 is_save = True
 plot_interm = False
-version_num = 13.0
+version_num = 13.1
 #the third digit after decimal point would be used to determine the run argument for each stage
 resize = False
 
@@ -41,7 +41,12 @@ resize = False
 initial_stem = True #the algo will initial a stem img using OTSU, else it relies on user input for initializing a stem img
 resize_output = True #shrink to 1/3 of img_width,img_height
 
+if version_num >= 13 and version_num < 14 and initial_stem==False:
+    sys.exit("version num is btw 13 to 14, should set initial_stem to True")
+
+
 run_foreground_seg,run_poor_qual,run_rm_big_emb,run_rolling_window,run_sep_weak_strong_emb,run_rm_small_emb = get_each_stage_arg(version_num)
+
 
 folder_list = []
 has_tif = []
@@ -55,7 +60,7 @@ else:
 all_folders_name = sorted(os.listdir(img_folder_rel), key=lambda s: s.lower())
 all_folders_dir = [os.path.join(img_folder_rel,folder) for folder in all_folders_name]
 
-#for img_folder in all_folders_dir[2:5]:#1:7
+#for img_folder in all_folders_dir[1:7]:
 img_folder = all_folders_dir[folder_idx_arg]
 
 #Need to process c folder
@@ -223,7 +228,7 @@ else:
     # Thresholding (clip pixel values smaller than threshold to 0)
     #  threshold is currently set to 3 (suggested by Chris)
     threshold = 3
-    th_stack = (diff_stack >= threshold)*diff_stack
+    th_stack = (diff_stack >= threshold)*diff_stack#continuous [0, 255]
     
     #help to clip all positive px value to 1
     bin_stack = to_binary(th_stack)
@@ -330,8 +335,17 @@ else:
                     stem_arr0 = cv2.resize(stem_arr0,(img_width,img_height))
                 is_stem_mat_cand = np.zeros(img_stack.shape)#initialize by 0's (easier for padding left, right)
                 is_stem_mat_cand[0,:,:] = stem_arr0#initialize 1st img's stem by stem.jpg
+                
+                shift_down_history = np.zeros(img_stack.shape[0])#not the same as what's really shifted with input/stem.jpg
+                #because what's really shifted is shift_down*"shift_ratio"
+                shift_right_history =  np.zeros(img_stack.shape[0])
                 for img_re_idx in range(1, img_stack.shape[0]):#1 cuz will look at (img_re_idx-1,img_re_idx) at once
                     shift_down,shift_right = corr_image(img_stack[img_re_idx-1,:,:], img_stack[img_re_idx,:,:])
+                    #record the shift raw value
+                    shift_down_history[img_re_idx] = shift_down
+                    shift_right_history[img_re_idx] = shift_right
+                    
+                    #true shifting value is shift raw value*shift_ratio if abs(shift raw value) > shift_px_min
                     if abs(shift_down) >= shift_px_min:
                         pad_row = int(abs(shift_down*shift_ratio))
                         pad_before_row = max(pad_row,0)#>0: down
@@ -350,6 +364,16 @@ else:
                         pad_after_col=0
                     is_stem_mat_pad = np.pad(is_stem_mat_cand[img_re_idx-1,:,:], ((pad_before_row*2, pad_after_row*2), (pad_before_col*2, pad_after_col*2)), 'edge')
                     is_stem_mat_cand[img_re_idx,:,:]=is_stem_mat_pad[pad_row:img_nrow+pad_row,pad_col:img_ncol+pad_col]
+                
+                shift_dist_history = np.sqrt(np.square(shift_down_history)+np.square(shift_right_history))
+                if is_save==True:
+                    np.savetxt(chunk_folder + '/shift_down_history.txt', shift_down_history,fmt='%i')
+                    np.savetxt(chunk_folder + '/shift_right_history.txt', shift_right_history,fmt='%i')
+                    np.savetxt(chunk_folder + '/shift_dist_history.txt', shift_dist_history,fmt='%i')
+                    #c2.2 img idx=23: 26.48 (big shift)
+                    #in4 img idx: 1~4 : shift_dist = 2 (not shift, only has gel movement), 5~199: 1
+                    # most of the images in c2.2,c5,in3,in4 don't suffer that much from shifting (shift_dist mostly<=3)
+                
                 if version_num >= 13:
                     is_stem_mat_OTSU = np.ones(img_stack.shape)
                     img_re_idx = 0
@@ -420,6 +444,7 @@ else:
     
             
             is_stem_mat2 = is_stem_mat[:-1,:,:]#drop the last img s.t. size would be the same as diff_stack
+            #continuous not binary, could be any value from 0:bgd to 1:stem
             if is_save==True:
                 plt.imsave(chunk_folder + "/m_3_is_stem_mat2_0.jpg",is_stem_mat2[0,:,:],cmap='gray')
                 plt.imsave(chunk_folder + "/m_3_is_stem_mat2_last.jpg",is_stem_mat2[-1,:,:],cmap='gray')
@@ -506,7 +531,7 @@ else:
     '''1st stage'''
     if is_stem==True:
         filter_stack = median_filter_stack(is_stem_mat2*th_stack,median_kernel_sz)#[resize Dingyi]might consider 2?#5 is better than max(round(5/646*img_ncol),1) for cas2.2_Stem
-            
+        #continuous, (0, max(th_stack)) can be at most 255 if max(th_stack)=255    
         print("median filter done")
         
         '''
@@ -786,11 +811,30 @@ else:
     '''
     median_kernel_sz2 = 3
     final_median = median_filter_stack(final_stack/255*th_stack,median_kernel_sz2)
-    #convert final_stack from (0,255) tp (0,1): (0 bgd, 1 emb), have to multiply th_stack before median_filter, else there'll be too many 0 (cuz final_stack is binary, not cont)
+    #convert final_stack from (0,255) to (0,1): (0 bgd, 1 emb), have to multiply th_stack before median_filter, else there'll be too many 0 (cuz final_stack is binary, not cont)
     final_median_bin = to_binary(final_median)*255
     
+
     #time
     print_used_time(start_time)
+    
+    if resize_output==True:
+        '''
+        shrink output tif by 1/3 (preserving the height-width ratio)
+        '''
+        img_height_out = round(img_height/3)
+        img_width_out = round(img_width/3)
+        final_stack = mat_reshape(final_stack, height = img_height_out, width = img_width_out)
+        bin_stack = bin_stack.astype(np.uint8)#convert from str to uint8
+        bin_stack = mat_reshape(bin_stack, height = img_height_out, width = img_width_out)
+        filter_stack = mat_reshape(filter_stack, height = img_height_out, width = img_width_out)
+        final_median_bin = mat_reshape(final_median_bin, height = img_height_out, width = img_width_out)
+        if is_stem == True and run_sep_weak_strong_emb==True:
+            final_stack_prev_stage = mat_reshape(final_stack_prev_stage, height = img_height_out, width = img_width_out)
+            if version_num >= 11:
+                final_stack_strong_emb_cand = mat_reshape(final_stack_strong_emb_cand, height = img_height_out, width = img_width_out)
+            if version_num >= 9.9:
+                weak_emb_stack = mat_reshape(weak_emb_stack, height = img_height_out, width = img_width_out)
     
     if match==True:
         #combined with true tif file
@@ -800,6 +844,10 @@ else:
         true_mask = true_mask[tm_start_img_idx:tm_end_img_idx,:,:]
         if resize:
         	true_mask = mat_reshape(true_mask, height = img_height, width = img_width)
+        if resize_output:
+            img_height_out = round(img_height/3)
+            img_width_out = round(img_width/3)
+            true_mask = mat_reshape(true_mask, height = img_height_out, width = img_width_out)#have to be the same size as final_Stack for confusion_mat_pixel(
         combined_list = (true_mask,final_median_bin.astype(np.uint8),final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
     else:
         combined_list = (final_median_bin.astype(np.uint8),final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
@@ -810,26 +858,6 @@ else:
     final_combined_inv_info = add_img_info_to_stack(final_combined_inv,img_paths,start_img_idx)
         
     if is_save==True:
-
-        if resize_output==True:
-            '''
-            shrink output tif by 1/3 (preserving the height-width ratio)
-            '''
-            img_height_out = round(img_height/3)
-            img_width_out = round(img_width/3)
-            true_mask = mat_reshape(true_mask, height = img_height_out, width = img_width_out)#have to be the same size as final_Stack for confusion_mat_pixel(
-            final_stack = mat_reshape(final_stack, height = img_height_out, width = img_width_out)
-            bin_stack = bin_stack.astype(np.uint8)#convert from str to uint8
-            bin_stack = mat_reshape(bin_stack, height = img_height_out, width = img_width_out)
-            filter_stack = mat_reshape(filter_stack, height = img_height_out, width = img_width_out)
-            final_median_bin = mat_reshape(final_median_bin, height = img_height_out, width = img_width_out)
-            if is_stem == True and run_sep_weak_strong_emb==True:
-                final_stack_prev_stage = mat_reshape(final_stack_prev_stage, height = img_height_out, width = img_width_out)
-                if version_num >= 11:
-                    final_stack_strong_emb_cand = mat_reshape(final_stack_strong_emb_cand, height = img_height_out, width = img_width_out)
-                if version_num >= 9.9:
-                    weak_emb_stack = mat_reshape(weak_emb_stack, height = img_height_out, width = img_width_out)
-        
         tiff.imsave(chunk_folder+'/predict.tif',255-final_stack.astype(np.uint8))
         #tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
         #tiff.imsave(chunk_folder+'/median_filter.tif',255-(filter_stack).astype(np.uint8))
@@ -989,6 +1017,7 @@ else:
                 f.write(str(has_emb_idx))
                 if is_stem==True:
                     if run_poor_qual==True:
+                        f.write(str("\n\n"))
                         f.write(f'percentage of img w/ bubble: {len(has_bubble_idx)}/{(img_num-1)} = {has_bubble_per} %\n')
                         f.write('img index with bubble:\n')
                         f.write(str(has_bubble_idx+(start_img_idx-1)))
@@ -1001,6 +1030,7 @@ else:
                         f.write('img index in poor_qual_set2 (emb too big):\n')
                         f.write(str( np.asarray(poor_qual_set2)+(start_img_idx-1)))
                     if run_sep_weak_strong_emb==True:
+                        f.write(str("\n\n"))
                         f.write(f'geo_invalid_emb_set:{geo_invalid_emb_set}\n')
                         f.write(f'cleaned_but_not_all_geo_invalid_set:{cleaned_but_not_all_geo_invalid_set}\n\n')
                         f.write(f'weak_emb_cand_set:{weak_emb_cand_set}\n')
@@ -1010,4 +1040,4 @@ else:
                         f.write(str("\n\n"))
                         f.write('img index where proportion of emb. pixels < emb_pro_th_min:\n')
                         f.write(str(treat_as_no_emb_idx+(start_img_idx-1)))
-                
+
