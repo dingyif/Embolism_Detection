@@ -186,6 +186,9 @@ else:
                 else:
                     img_nrow = img_array.shape[0]
                     img_ncol = img_array.shape[1]
+                
+                ori_img_height = img_array.shape[0] #to separate from img_height(used in resize)
+                ori_img_width = img_array.shape[1]
                 img_stack = np.ndarray((img_num,img_nrow,img_ncol), dtype=np.float32)
                 print("img size:",img_nrow," x ", img_ncol)
             
@@ -840,12 +843,13 @@ else:
         for img_idx in np.where(has_embolism==1)[0]:
             bin_med_clear[img_idx] = filter_bin_stack[img_idx]
     
+    
     if resize_output==True:
         '''
         shrink output tif by 1/3 (preserving the height-width ratio)
         '''
-        img_height_out = round(img_height/3)
-        img_width_out = round(img_width/3)
+        img_height_out = round(img_nrow/3)
+        img_width_out = round(img_ncol/3)
         final_stack = mat_reshape(final_stack, height = img_height_out, width = img_width_out)
         bin_stack = bin_stack.astype(np.uint8)#convert from str to uint8
         bin_stack = mat_reshape(bin_stack, height = img_height_out, width = img_width_out)
@@ -858,32 +862,67 @@ else:
             if version_num >= 9.9:
                 weak_emb_stack = mat_reshape(weak_emb_stack, height = img_height_out, width = img_width_out)
     
+    img_num_match = True#determines whether can get combined_list or not
+    #even if match == True, img height/row is different, still can get combined_list after some padding the heights
+    #will be True if match==False 
     if match==True:
         #combined with true tif file
         true_mask  = tiff.imread(up_2_date_tiff)#tiff.imread(img_folder+'/4 Mask Substack ('+str(start_img_idx)+'-'+str(end_img_idx-1)+') clean.tif')
         tm_start_img_idx = chunk_idx*(chunk_size-1)
         tm_end_img_idx = tm_start_img_idx+chunk_size-1
         true_mask = true_mask[tm_start_img_idx:tm_end_img_idx,:,:]
-        if resize==True:
-        	true_mask = mat_reshape(true_mask, height = img_height, width = img_width)
-        if resize_output==True:
-            img_height_out = round(img_height/3)
-            img_width_out = round(img_width/3)
-            true_mask = mat_reshape(true_mask, height = img_height_out, width = img_width_out)#have to be the same size as final_Stack for confusion_mat_pixel(
-        if use_bin_med_clear==True:
-            combined_list = (true_mask,final_median_bin.astype(np.uint8),(bin_med_clear*255).astype(np.uint8),(bin_stack*255).astype(np.uint8))
-        else:
-            combined_list = (true_mask,final_median_bin.astype(np.uint8),final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
+        
+        
+        '''
+        check if true tif is of the same dime as final_stack
+        '''
+        dim_match = True#dimension matches btw true mask and img size
+        
+        if true_mask.shape[0]!= final_stack.shape[0]: 
+            print("[Warning] number of img mismatch between true tif and final_stack")
+            dim_match = False
+            img_num_match = False
+            
+        if true_mask.shape[1]!= ori_img_height:
+            print("height mismatch between true tif and final_stack")
+            if ori_img_height >  true_mask.shape[1]:
+                height_diff = (ori_img_height - true_mask.shape[1])
+                tm_pad_before_row = math.floor(height_diff/2)
+                tm_pad_after_row = tm_pad_before_row
+                if height_diff%2 == 1:#height diff is odd number --> add another row to the bottom
+                    tm_pad_after_row += 1
+            #pad a bit of height s.t. combined_list still works    
+            true_mask = np.pad(true_mask, ((0,0),(tm_pad_before_row, tm_pad_after_row), (0,0)), 'edge')
+            dim_match = False
+        
+        if  true_mask.shape[2]!= ori_img_width:
+            print("width mismatch between true tif and final_stack")
+            dim_match = False
+        
+        '''
+        combined with true tif
+        '''
+        if img_num_match==True: #can combined
+            if resize==True:
+                true_mask = mat_reshape(true_mask, height = img_height, width = img_width)
+            if resize_output==True:
+                img_height_out = round(img_height/3)
+                img_width_out = round(img_width/3)
+                true_mask = mat_reshape(true_mask, height = img_height_out, width = img_width_out)#have to be the same size as final_Stack for confusion_mat_pixel(
+            if use_bin_med_clear==True:
+                combined_list = (true_mask,final_median_bin.astype(np.uint8),(bin_med_clear*255).astype(np.uint8),(bin_stack*255).astype(np.uint8))
+            else:
+                combined_list = (true_mask,final_median_bin.astype(np.uint8),final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
     else:
         if use_bin_med_clear==True:    
             combined_list = (final_median_bin.astype(np.uint8),(bin_med_clear*255).astype(np.uint8),(bin_stack*255).astype(np.uint8))
         else:
             combined_list = (final_median_bin.astype(np.uint8),final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
-        
-    final_combined = np.concatenate(combined_list,axis=2)
-    final_combined_inv =  -final_combined+255 #invert 0 and 255 s.t. background becomes white
-
-    final_combined_inv_info = add_img_info_to_stack(final_combined_inv,img_paths,start_img_idx)
+    
+    if img_num_match==True:
+        final_combined = np.concatenate(combined_list,axis=2)
+        final_combined_inv =  -final_combined+255 #invert 0 and 255 s.t. background becomes white
+        final_combined_inv_info = add_img_info_to_stack(final_combined_inv,img_paths,start_img_idx)
         
     if is_save==True:
         tiff.imsave(chunk_folder+'/predict.tif',255-final_stack.astype(np.uint8))
@@ -957,16 +996,22 @@ else:
                 np.savetxt(chunk_folder + '/stc_false_positive_index.txt', con_img_list_stc[1]+(start_img_idx-1),fmt='%i')#integer format
                 np.savetxt(chunk_folder + '/stc_false_negative_index.txt', con_img_list_stc[2]+(start_img_idx-1),fmt='%i')
                 np.savetxt(chunk_folder + '/stc_true_positive_index.txt', con_img_list_stc[3]+(start_img_idx-1),fmt='%i')
-        con_df_px = confusion_mat_pixel(final_stack,true_mask)
-        #print(con_df_px)
-        total_num_pixel = final_stack.shape[0]*final_stack.shape[1]*final_stack.shape[2]
-        #print(con_df_px/total_num_pixel)
-        metrix_img = calc_metric(con_img_list[0])
-        metrix_px = calc_metric(con_df_px)
         
-        con_df_cluster, tp_area, fp_area,tp_height,fp_height,tp_width,fp_width = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10, chunk_folder=chunk_folder,is_save=is_save)    
+        metrix_img = calc_metric(con_img_list[0])
+        
+        if dim_match==True: 
+            '''
+            get px, cluster level metric if dimension matches btw true tif and raw imgs
+            '''
+            con_df_px = confusion_mat_pixel(final_stack,true_mask)
+            #print(con_df_px)
+            total_num_pixel = final_stack.shape[0]*final_stack.shape[1]*final_stack.shape[2]
+            #print(con_df_px/total_num_pixel)
+            metrix_px = calc_metric(con_df_px)
             
-        metrix_cluster = calc_metric(con_df_cluster)
+            con_df_cluster, tp_area, fp_area,tp_height,fp_height,tp_width,fp_width = confusion_mat_cluster(final_stack, true_mask, has_embolism, true_has_emb, blur_radius=10, chunk_folder=chunk_folder,is_save=is_save)    
+                
+            metrix_cluster = calc_metric(con_df_cluster)
         
         #make sure fn are in weak_emb_cand_set
         if run_sep_weak_strong_emb==True:
@@ -997,17 +1042,18 @@ else:
                 f.write(str("\n\n"))
                 f.write(f'false negative img index: {con_img_list[2]+(start_img_idx-1)}')
                 f.write(str("\n\n"))
-                f.write('pixel level metric:\n')
-                f.write(str(metrix_px))
-                f.write(str("\n\n"))
-                f.write(f'con_df_px: \n {con_df_px}')
-                f.write(str("\n\n"))
-                f.write(f'probability of pix: \n {(con_df_px/total_num_pixel)}')
-                f.write(str("\n\n"))
-                f.write('cluster level metric:\n')
-                f.write(str(metrix_cluster))
-                f.write(str("\n\n"))
-                f.write(f'con_df_cluster: \n {con_df_cluster}')
+                if dim_match == True:
+                    f.write('pixel level metric:\n')
+                    f.write(str(metrix_px))
+                    f.write(str("\n\n"))
+                    f.write(f'con_df_px: \n {con_df_px}')
+                    f.write(str("\n\n"))
+                    f.write(f'probability of pix: \n {(con_df_px/total_num_pixel)}')
+                    f.write(str("\n\n"))
+                    f.write('cluster level metric:\n')
+                    f.write(str(metrix_cluster))
+                    f.write(str("\n\n"))
+                    f.write(f'con_df_cluster: \n {con_df_cluster}')
                 if is_stem==True:
                     if run_poor_qual==True:
                         f.write(str("\n\n"))
