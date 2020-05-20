@@ -868,9 +868,8 @@ else:
     create bin_med_clear is essentially binarized filter_stack, but cleared the ones we predicted to have no embolism to an empty img
     might be helpful to Chris
     '''
-
+    filter_bin_stack = to_binary(filter_stack)#0 or 1
     if use_bin_med_clear == True:
-        filter_bin_stack = to_binary(filter_stack)#0 or 1
         bin_med_clear = np.zeros(final_stack.shape)
         for img_idx in np.where(has_embolism==1)[0]:
             bin_med_clear[img_idx] = filter_bin_stack[img_idx]
@@ -1149,3 +1148,4 @@ else:
                         f.write(str("\n\n"))
                         f.write('img index where proportion of emb. pixels < emb_pro_th_min:\n')
                         f.write(str(treat_as_no_emb_idx+(start_img_idx-1)))
+

@@ -51,7 +51,7 @@ resize = False
 #only incoorporated in "stem", not in "leafs"
 initial_stem = True #the algo will initial a stem img using OTSU, else it relies on user input for initializing a stem img
 resize_output = False #shrink to 1/3 of img_width,img_height
-use_bin_med_clear = True
+use_bin_med_clear = False
  
 
 if version_num >= 13 and version_num < 14 and initial_stem==False:
@@ -836,9 +836,8 @@ else:
     create bin_med_clear is essentially binarized filter_stack, but cleared the ones we predicted to have no embolism to an empty img
     might be helpful to Chris
     '''
-
+    filter_bin_stack = to_binary(filter_stack)#0 or 1
     if use_bin_med_clear == True:
-        filter_bin_stack = to_binary(filter_stack)#0 or 1
         bin_med_clear = np.zeros(final_stack.shape)
         for img_idx in np.where(has_embolism==1)[0]:
             bin_med_clear[img_idx] = filter_bin_stack[img_idx]
