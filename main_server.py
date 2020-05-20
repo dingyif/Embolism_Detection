@@ -962,6 +962,7 @@ else:
                 f.write(str(has_emb_idx))
                 if is_stem==True:
                     if run_poor_qual==True:
+                        f.write(str("\n\n"))
                         f.write(f'percentage of img w/ bubble: {len(has_bubble_idx)}/{(img_num-1)} = {has_bubble_per} %\n')
                         f.write('img index with bubble:\n')
                         f.write(str(has_bubble_idx+(start_img_idx-1)))
@@ -974,6 +975,7 @@ else:
                         f.write('img index in poor_qual_set2 (emb too big):\n')
                         f.write(str( np.asarray(poor_qual_set2)+(start_img_idx-1)))
                     if run_sep_weak_strong_emb==True:
+                        f.write(str("\n\n"))
                         f.write(f'geo_invalid_emb_set:{geo_invalid_emb_set}\n')
                         f.write(f'cleaned_but_not_all_geo_invalid_set:{cleaned_but_not_all_geo_invalid_set}\n\n')
                         f.write(f'weak_emb_cand_set:{weak_emb_cand_set}\n')
