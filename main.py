@@ -39,7 +39,8 @@ resize = False
 
 #only incoorporated in "stem", not in "leafs"
 initial_stem = True #the algo will initial a stem img using OTSU, else it relies on user input for initializing a stem img
-resize_output = True #shrink to 1/3 of img_width,img_height
+resize_output = False #shrink to 1/3 of img_width,img_height
+use_bin_med_clear = True
 
 if version_num >= 13 and version_num < 14 and initial_stem==False:
     sys.exit("version num is btw 13 to 14, should set initial_stem to True")
@@ -814,9 +815,19 @@ else:
     #convert final_stack from (0,255) to (0,1): (0 bgd, 1 emb), have to multiply th_stack before median_filter, else there'll be too many 0 (cuz final_stack is binary, not cont)
     final_median_bin = to_binary(final_median)*255
     
-
     #time
     print_used_time(start_time)
+    has_embolism = img_contain_emb(final_stack)
+    
+    '''
+    create bin_med_clear is essentially binarized filter_stack, but cleared the ones we predicted to have no embolism to an empty img
+    might be helpful to Chris
+    '''
+    if use_bin_med_clear == True:
+        filter_bin_stack = to_binary(filter_stack)#0 or 1
+        bin_med_clear = np.zeros(final_stack.shape)
+        for img_idx in np.where(has_embolism==1)[0]:
+            bin_med_clear[img_idx] = filter_bin_stack[img_idx]
     
     if resize_output==True:
         '''
@@ -842,16 +853,23 @@ else:
         tm_start_img_idx = chunk_idx*(chunk_size-1)
         tm_end_img_idx = tm_start_img_idx+chunk_size-1
         true_mask = true_mask[tm_start_img_idx:tm_end_img_idx,:,:]
-        if resize:
+        if resize==True:
         	true_mask = mat_reshape(true_mask, height = img_height, width = img_width)
-        if resize_output:
+        if resize_output==True:
             img_height_out = round(img_height/3)
             img_width_out = round(img_width/3)
             true_mask = mat_reshape(true_mask, height = img_height_out, width = img_width_out)#have to be the same size as final_Stack for confusion_mat_pixel(
-        combined_list = (true_mask,final_median_bin.astype(np.uint8),final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
+        
+        if use_bin_med_clear==True:
+            combined_list = (true_mask,final_median_bin.astype(np.uint8),(bin_med_clear*255).astype(np.uint8),(bin_stack*255).astype(np.uint8))
+        else:
+            combined_list = (true_mask,final_median_bin.astype(np.uint8),final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
     else:
-        combined_list = (final_median_bin.astype(np.uint8),final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
-    
+        if use_bin_med_clear==True:    
+            combined_list = (final_median_bin.astype(np.uint8),(bin_med_clear*255).astype(np.uint8),(bin_stack*255).astype(np.uint8))
+        else:
+            combined_list = (final_median_bin.astype(np.uint8),final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
+        
     final_combined = np.concatenate(combined_list,axis=2)
     final_combined_inv =  -final_combined+255 #invert 0 and 255 s.t. background becomes white
 
@@ -861,7 +879,10 @@ else:
         tiff.imsave(chunk_folder+'/predict.tif',255-final_stack.astype(np.uint8))
         #tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
         #tiff.imsave(chunk_folder+'/median_filter.tif',255-(filter_stack).astype(np.uint8))
-        tiff.imsave(chunk_folder+'/bin_median_filter.tif',255-(to_binary(filter_stack)*255).astype(np.uint8))
+        if use_bin_med_clear==True:
+            tiff.imsave(chunk_folder+'/bin_med_clear.tif',255-(bin_med_clear*255).astype(np.uint8))
+        else:
+            tiff.imsave(chunk_folder+'/bin_median_filter.tif',255-(filter_bin_stack*255).astype(np.uint8))
         tiff.imsave(chunk_folder+'/predict_bin_med.tif',255-final_median_bin.astype(np.uint8))
         if is_stem == True:
             if run_sep_weak_strong_emb==True:
@@ -877,7 +898,7 @@ else:
         print("saved tif files")
     
     diff_min_sec=print_used_time(start_time)
-    has_embolism = img_contain_emb(final_stack)
+    
     
     if match==True:    
         true_has_emb = img_contain_emb(true_mask)
@@ -1040,4 +1061,3 @@ else:
                         f.write(str("\n\n"))
                         f.write('img index where proportion of emb. pixels < emb_pro_th_min:\n')
                         f.write(str(treat_as_no_emb_idx+(start_img_idx-1)))
-
