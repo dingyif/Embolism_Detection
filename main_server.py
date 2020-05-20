@@ -13,9 +13,10 @@ from func import add_img_info_to_stack, extract_foregroundRGB,foreground_B,mat_r
 from func import detect_bubble, calc_bubble_area_prop, calc_bubble_cc_max_area_p, subset_vec_set, remove_cc_by_geo, rescue_weak_emb_by_dens
 from func import img_contain_emb, extract_foreground, find_emoblism_by_contour, find_emoblism_by_filter_contour
 from func import confusion_mat_img, confusion_mat_pixel,confusion_mat_cluster,calc_metric,print_used_time, foregound_Th_OTSU
-from supplement_func import get_each_stage_arg
+from func import unimodality_dip_test
 from density import density_of_a_rect
 from detect_by_filter_fx import median_filter_stack
+from supplement_func import get_each_stage_arg
 import math
 import datetime
 start_time = datetime.datetime.now()
@@ -32,6 +33,8 @@ parser.add_argument('--chunk_size', type=int)
 parser.add_argument('--version', type=float)
 parser.add_argument('--resize', type=int)
 parser.add_argument('--initial_stem', type=int)
+parser.add_argument('--resize_output', type=int)
+parser.add_argument('--use_bin_med_clear', type=int)
 args = parser.parse_args()
 '''
 user-specified arguments (from server input)
@@ -46,10 +49,18 @@ else:
     has_processed = False
     proc_str = "unprocessed"
 
-if args.initial_stem==1:
-    initial_stem = True#the algo will initial a stem img using OTSU, else it relies on user input for initializing a stem img
-else:
-    initial_stem = False
+def convert_int_to_boolean(int_value):
+    if int_value==1:
+        return True
+    elif int_value==0:
+        return False
+    else:
+        sys.exit("argument isn't binary(0 or 1)")
+
+initial_stem = convert_int_to_boolean(args.initial_stem)#the algo will initial a stem img using OTSU, else it relies on user input for initializing a stem img
+resize = convert_int_to_boolean(args.resize)
+resize_output = convert_int_to_boolean(args.resize_output)
+use_bin_med_clear = convert_int_to_boolean(args.use_bin_med_clear)
 
 chunk_idx = args.chunk_idx#starts from 0
 chunk_size = args.chunk_size#4000#the number of imgs to process at a time
@@ -57,10 +68,6 @@ chunk_size = args.chunk_size#4000#the number of imgs to process at a time
 is_save = True
 plot_interm = False
 version_num = args.version#9.7
-if args.resize==1:
-    resize = True
-else:
-    resize = False
 
 run_foreground_seg,run_poor_qual,run_rm_big_emb,run_rolling_window,run_sep_weak_strong_emb,run_rm_small_emb = get_each_stage_arg(version_num)
 
@@ -243,7 +250,7 @@ else:
     # Thresholding (clip pixel values smaller than threshold to 0)
     #  threshold is currently set to 3 (suggested by Chris)
     threshold = 3
-    th_stack = (diff_stack >= threshold)*diff_stack
+    th_stack = (diff_stack >= threshold)*diff_stack#continuous [0, 255]
     
     #help to clip all positive px value to 1
     bin_stack = to_binary(th_stack)
@@ -301,15 +308,30 @@ else:
             #be more consservative about shifting, else error accumulation...
             shift_px_min = 0
             shift_ratio = 0.95
+            first_img_path = img_paths[(start_img_idx-1):end_img_idx][0]
             if initial_stem:
-                #initial the stem area for the first img of the chunk size
-                frist_img_array = cv2.imread(img_paths[(start_img_idx-1):end_img_idx][0])
-                is_stem_mat_init = foregound_Th_OTSU(frist_img_array,img_re_idx = 1,chunk_folder = chunk_folder)
-                if not os.path.exists(os.path.join(img_folder,"input")):#create new folder if not existed
-                    os.makedirs(os.path.join(img_folder,"input"))#create the folder to save stem_OTSU.jpg
-                first_stem_filename = "stem_OTSU.jpg"
-                plt.imsave(img_folder + "/input" + "/"+first_stem_filename,is_stem_mat_init,cmap='gray')
-                print('stem.jpg is successfully initialized')
+                #check unimodality of the stem distribution 
+                #if it is, then use GREEN layer to initial stem jpg.
+                if unimodality_dip_test(first_img_path):
+                    #initial the stem area for the first img of the chunk size
+                    imgRGB_arr=np.float32(Image.open(first_img_path))#RGB image to numpy array
+                    imgGarray = imgRGB_arr[:,:,1] #only look at G layer
+                    is_stem_mat_init = extract_foregroundRGB(imgGarray,img_re_idx, chunk_folder, blur_radius=10.0,expand_radius_ratio=2,is_save=False,use_max_area=True)
+                    if not os.path.exists(os.path.join(img_folder,"input")):#create new folder if not existed
+                        os.makedirs(os.path.join(img_folder,"input"))#create the folder to save stem_OTSU.jpg
+                    first_stem_filename = "stem_green.jpg"
+                    plt.imsave(img_folder + "/input" + "/"+first_stem_filename,is_stem_mat_init,cmap='gray')
+                    print('G_stem.jpg is successfully initialized')
+                else:
+                    #read the first img
+                    frist_img_array = cv2.imread(first_img_path)
+                    #compute the stem mask ndarray
+                    is_stem_mat_init = foregound_Th_OTSU(frist_img_array,img_re_idx = 1,chunk_folder = chunk_folder)
+                    if not os.path.exists(os.path.join(img_folder,"input")):#create new folder if not existed
+                        os.makedirs(os.path.join(img_folder,"input"))#create the folder to save stem_OTSU.jpg
+                    first_stem_filename = "stem_OTSU.jpg"
+                    plt.imsave(img_folder + "/input" + "/"+first_stem_filename,is_stem_mat_init,cmap='gray')
+                    print('OTSU_stem.jpg is successfully initialized')
             else:#user-input jpg
                 first_stem_filename = "stem.jpg"
             
@@ -335,8 +357,17 @@ else:
                     stem_arr0 = cv2.resize(stem_arr0,(img_width,img_height))
                 is_stem_mat_cand = np.zeros(img_stack.shape)#initialize by 0's (easier for padding left, right)
                 is_stem_mat_cand[0,:,:] = stem_arr0#initialize 1st img's stem by stem.jpg
+                
+                shift_down_history = np.zeros(img_stack.shape[0])#not the same as what's really shifted with input/stem.jpg
+                #because what's really shifted is shift_down*"shift_ratio"
+                shift_right_history =  np.zeros(img_stack.shape[0])
                 for img_re_idx in range(1, img_stack.shape[0]):#1 cuz will look at (img_re_idx-1,img_re_idx) at once
                     shift_down,shift_right = corr_image(img_stack[img_re_idx-1,:,:], img_stack[img_re_idx,:,:])
+                    #record the shift raw value
+                    shift_down_history[img_re_idx] = shift_down
+                    shift_right_history[img_re_idx] = shift_right
+                    
+                    #true shifting value is shift raw value*shift_ratio if abs(shift raw value) > shift_px_min
                     if abs(shift_down) >= shift_px_min:
                         pad_row = int(abs(shift_down*shift_ratio))
                         pad_before_row = max(pad_row,0)#>0: down
@@ -355,6 +386,16 @@ else:
                         pad_after_col=0
                     is_stem_mat_pad = np.pad(is_stem_mat_cand[img_re_idx-1,:,:], ((pad_before_row*2, pad_after_row*2), (pad_before_col*2, pad_after_col*2)), 'edge')
                     is_stem_mat_cand[img_re_idx,:,:]=is_stem_mat_pad[pad_row:img_nrow+pad_row,pad_col:img_ncol+pad_col]
+                
+                shift_dist_history = np.sqrt(np.square(shift_down_history)+np.square(shift_right_history))
+                if is_save==True:
+                    np.savetxt(chunk_folder + '/shift_down_history.txt', shift_down_history,fmt='%i')
+                    np.savetxt(chunk_folder + '/shift_right_history.txt', shift_right_history,fmt='%i')
+                    np.savetxt(chunk_folder + '/shift_dist_history.txt', shift_dist_history,fmt='%i')
+                    #c2.2 img idx=23: 26.48 (big shift)
+                    #in4 img idx: 1~4 : shift_dist = 2 (not shift, only has gel movement), 5~199: 1
+                    # most of the images in c2.2,c5,in3,in4 don't suffer that much from shifting (shift_dist mostly<=3)
+                
                 if version_num >= 13:
                     is_stem_mat_OTSU = np.ones(img_stack.shape)
                     img_re_idx = 0
@@ -425,6 +466,7 @@ else:
     
             
             is_stem_mat2 = is_stem_mat[:-1,:,:]#drop the last img s.t. size would be the same as diff_stack
+            #continuous not binary, could be any value from 0:bgd to 1:stem
             if is_save==True:
                 plt.imsave(chunk_folder + "/m_3_is_stem_mat2_0.jpg",is_stem_mat2[0,:,:],cmap='gray')
                 plt.imsave(chunk_folder + "/m_3_is_stem_mat2_last.jpg",is_stem_mat2[-1,:,:],cmap='gray')
@@ -511,7 +553,7 @@ else:
     '''1st stage'''
     if is_stem==True:
         filter_stack = median_filter_stack(is_stem_mat2*th_stack,median_kernel_sz)#[resize Dingyi]might consider 2?#5 is better than max(round(5/646*img_ncol),1) for cas2.2_Stem
-            
+        #continuous, (0, max(th_stack)) can be at most 255 if max(th_stack)=255    
         print("median filter done")
         
         '''
@@ -526,8 +568,6 @@ else:
                 combined_list_bubble = ((bubble_stack*255).astype(np.uint8),(filter_norm*255).astype(np.uint8),(bin_stack*255).astype(np.uint8))
                 bubble_combined = np.concatenate(combined_list_bubble,axis=2)
                 bubble_combined_inv =  -bubble_combined+255#so that bubbles: white --> black, bgd: black-->white
-                tiff.imsave(chunk_folder+'/bubble_stack.tif', bubble_combined_inv)
-                print("saved bubble_stack.tif")
                 
                 has_bubble_idx = np.where(has_bubble_vec==1)[0]
                 has_bubble_per = round(100*len(has_bubble_idx)/(img_num-1),2)
@@ -788,8 +828,46 @@ else:
         print("imgs where proportion of emb. pixels < emb_pro_th_min: ",treat_as_no_emb_idx)
         print("2nd stage done")
     
+    '''
+    median filter on final_stack/255*th_stack --> binarize
+    '''
+    median_kernel_sz2 = 3
+    final_median = median_filter_stack(final_stack/255*th_stack,median_kernel_sz2)
+    #convert final_stack from (0,255) to (0,1): (0 bgd, 1 emb), have to multiply th_stack before median_filter, else there'll be too many 0 (cuz final_stack is binary, not cont)
+    final_median_bin = to_binary(final_median)*255
+    
     #time
     print_used_time(start_time)
+    has_embolism = img_contain_emb(final_stack)
+    
+    '''
+    create bin_med_clear is essentially binarized filter_stack, but cleared the ones we predicted to have no embolism to an empty img
+    might be helpful to Chris
+    '''
+
+    if use_bin_med_clear == True:
+        filter_bin_stack = to_binary(filter_stack)#0 or 1
+        bin_med_clear = np.zeros(final_stack.shape)
+        for img_idx in np.where(has_embolism==1)[0]:
+            bin_med_clear[img_idx] = filter_bin_stack[img_idx]
+    
+    if resize_output==True:
+        '''
+        shrink output tif by 1/3 (preserving the height-width ratio)
+        '''
+        img_height_out = round(img_height/3)
+        img_width_out = round(img_width/3)
+        final_stack = mat_reshape(final_stack, height = img_height_out, width = img_width_out)
+        bin_stack = bin_stack.astype(np.uint8)#convert from str to uint8
+        bin_stack = mat_reshape(bin_stack, height = img_height_out, width = img_width_out)
+        filter_stack = mat_reshape(filter_stack, height = img_height_out, width = img_width_out)
+        final_median_bin = mat_reshape(final_median_bin, height = img_height_out, width = img_width_out)
+        if is_stem == True and run_sep_weak_strong_emb==True:
+            final_stack_prev_stage = mat_reshape(final_stack_prev_stage, height = img_height_out, width = img_width_out)
+            if version_num >= 11:
+                final_stack_strong_emb_cand = mat_reshape(final_stack_strong_emb_cand, height = img_height_out, width = img_width_out)
+            if version_num >= 9.9:
+                weak_emb_stack = mat_reshape(weak_emb_stack, height = img_height_out, width = img_width_out)
     
     if match==True:
         #combined with true tif file
@@ -797,12 +875,22 @@ else:
         tm_start_img_idx = chunk_idx*(chunk_size-1)
         tm_end_img_idx = tm_start_img_idx+chunk_size-1
         true_mask = true_mask[tm_start_img_idx:tm_end_img_idx,:,:]
-        if resize:
+        if resize==True:
         	true_mask = mat_reshape(true_mask, height = img_height, width = img_width)
-        combined_list = (true_mask,final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
+        if resize_output==True:
+            img_height_out = round(img_height/3)
+            img_width_out = round(img_width/3)
+            true_mask = mat_reshape(true_mask, height = img_height_out, width = img_width_out)#have to be the same size as final_Stack for confusion_mat_pixel(
+        if use_bin_med_clear==True:
+            combined_list = (true_mask,final_median_bin.astype(np.uint8),(bin_med_clear*255).astype(np.uint8),(bin_stack*255).astype(np.uint8))
+        else:
+            combined_list = (true_mask,final_median_bin.astype(np.uint8),final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
     else:
-        combined_list = (final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
-    
+        if use_bin_med_clear==True:    
+            combined_list = (final_median_bin.astype(np.uint8),(bin_med_clear*255).astype(np.uint8),(bin_stack*255).astype(np.uint8))
+        else:
+            combined_list = (final_median_bin.astype(np.uint8),final_stack.astype(np.uint8),(bin_stack*255).astype(np.uint8))
+        
     final_combined = np.concatenate(combined_list,axis=2)
     final_combined_inv =  -final_combined+255 #invert 0 and 255 s.t. background becomes white
 
@@ -810,19 +898,28 @@ else:
         
     if is_save==True:
         tiff.imsave(chunk_folder+'/predict.tif',255-final_stack.astype(np.uint8))
-        tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
-        if is_stem == True and run_sep_weak_strong_emb==True:
-            tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo.tif',255-final_stack_prev_stage.astype(np.uint8))
-            if version_num >= 11:
-                tiff.imsave(chunk_folder+'/stc_predict.tif',255-final_stack_strong_emb_cand.astype(np.uint8))
-            if version_num >= 9.9:
-                tiff.imsave(chunk_folder+'/weak_emb_stack.tif',255-weak_emb_stack.astype(np.uint8))
+        #tiff.imsave(chunk_folder+'/bin_diff.tif',255-(bin_stack*255).astype(np.uint8))
+        #tiff.imsave(chunk_folder+'/median_filter.tif',255-(filter_stack).astype(np.uint8))
+        if use_bin_med_clear==True:
+            tiff.imsave(chunk_folder+'/bin_med_clear.tif',255-(bin_med_clear*255).astype(np.uint8))
+        else:
+            tiff.imsave(chunk_folder+'/bin_median_filter.tif',255-(filter_bin_stack*255).astype(np.uint8))
+        tiff.imsave(chunk_folder+'/predict_bin_med.tif',255-final_median_bin.astype(np.uint8))
+        if is_stem == True:
+            if run_sep_weak_strong_emb==True:
+                tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo.tif',255-final_stack_prev_stage.astype(np.uint8))
+                if version_num >= 11:
+                    tiff.imsave(chunk_folder+'/stc_predict.tif',255-final_stack_strong_emb_cand.astype(np.uint8))
+                if version_num >= 9.9:
+                    tiff.imsave(chunk_folder+'/weak_emb_stack.tif',255-weak_emb_stack.astype(np.uint8))
+            if run_poor_qual==True:
+                tiff.imsave(chunk_folder+'/bubble_stack.tif', bubble_combined_inv)
             #tiff.imsave(chunk_folder+'/predict_before_rm_cc_geo_small.tif',255-before_rm_cc_geo_stack_small.astype(np.uint8))
         tiff.imsave(chunk_folder+'/combined_4.tif', final_combined_inv_info)
         print("saved tif files")
     
     diff_min_sec=print_used_time(start_time)
-    has_embolism = img_contain_emb(final_stack)
+    
     
     if match==True:    
         true_has_emb = img_contain_emb(true_mask)
@@ -985,4 +1082,3 @@ else:
                         f.write(str("\n\n"))
                         f.write('img index where proportion of emb. pixels < emb_pro_th_min:\n')
                         f.write(str(treat_as_no_emb_idx+(start_img_idx-1)))
-                
