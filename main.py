@@ -56,7 +56,8 @@ use_bin_med_clear = True
 
 if version_num >= 13 and version_num < 14 and initial_stem==False:
     sys.exit("version num is btw 13 to 14, should set initial_stem to True")
-
+elif version_num < 12 and initial_stem==True:
+    sys.exit("version num < 12, should set initial_stem to False")
 
 run_foreground_seg,run_poor_qual,run_rm_big_emb,run_rolling_window,run_sep_weak_strong_emb,run_rm_small_emb = get_each_stage_arg(version_num)
 
