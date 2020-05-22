@@ -331,11 +331,11 @@ def do_pca(X, row_num, col_num, to_plot=False, fig_height=5):
         fig, ax = plt.subplots(figsize = (math.floor(fig_height/row_num*col_num),fig_height))
         ax.set_xlim(0, col_num)
         ax.set_ylim(0, row_num)
-        plt.scatter(X[:,0], X[:,1], alpha=0.2)#if there's TypeError: '(slice(None, None, None), 0)' is an invalid key, change to "iloc" i.e. plt.scatter(X.iloc[:,0], X.iloc[:,1], alpha=0.2)
+        plt.scatter(X[:,0], X[:,1], alpha=0.2)#if X is pandas and there's TypeError: '(slice(None, None, None), 0)' is an invalid key, change to "iloc" i.e. plt.scatter(X.iloc[:,0], X.iloc[:,1], alpha=0.2)
         for length, vector in zip(pca.explained_variance_, pca.components_):
             scale_magnitude_tmp = np.sqrt(length)
             if scale_magnitude_tmp < min(row_num,col_num)/10:#when scale_magnitude_tmp is to small, set the arrow size to min(row_num,col_num)/10
-                scale_magnitude =min(row_num,col_num)/10
+                scale_magnitude = min(row_num,col_num)/10
             elif scale_magnitude_tmp > min(row_num,col_num)/2:
                 scale_magnitude = min(row_num,col_num)/2
             else:
