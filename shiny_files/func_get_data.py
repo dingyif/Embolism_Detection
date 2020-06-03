@@ -12,8 +12,179 @@ import datetime
 import math
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
-from plotnine import *
+import unidip.dip as dip
+from scipy import ndimage, stats #for median filter,extract foreground
+from PIL import Image
+import tifffile as tiff
+import seaborn as sns
 
+def calc_metric(con_mat):
+    t_neg = con_mat['Predict 0']['True 0']
+    t_pos = con_mat['Predict 1']['True 1']
+    f_pos = con_mat['Predict 1']['True 0']
+    f_neg = con_mat['Predict 0']['True 1']
+    
+    try: 
+        sens = round(t_pos/(t_pos+f_neg)*100.0,2)#want sensitivity to be high (want fn to be low)
+    except ZeroDivisionError:
+        print(f'sens denominator equals to {t_pos+f_neg}')
+    try:
+        prec = round(t_pos/(t_pos+f_pos)*100,2)#want precision to be high(fp small --> less labor afterwards)
+    except ZeroDivisionError:
+        print(f'prec denominator equals to {t_pos+f_pos}')
+    try:
+        acc = round((t_pos+t_neg)/(t_neg+t_pos+f_pos+f_neg)*100,2)#accuracy
+    except ZeroDivisionError:
+        print(f'acc denominator equals to {t_neg+t_pos+f_pos+f_neg}')
+    return([('sensitivity',sens),('precision',prec),('accuracy',acc)])
+
+def to_binary(img_stack):
+    #convert 0 to 0(black) and convert all postivie pixel values to 1(white)
+    return((img_stack > 0)*1)
+
+def extract_foregroundRGB(img_2d,img_re_idx = '',chunk_folder = '', blur_radius=6.0,expand_radius_ratio=2,is_save=False,use_max_area=True):
+    '''
+    assume stem is more green than backgorund
+    '''
+    
+    #smoothing (gaussian filter)
+    smooth_img = ndimage.gaussian_filter(img_2d, blur_radius)
+    
+    is_stem_mat = (smooth_img > np.mean(img_2d))*1 #why not change it to np.mean(smooth_img), cuz np.mean(img_2d) seems slightly bigger than that of smooth_img?
+    
+    #plot_gray_img(is_stem_mat)#1(white) for stem part
+    if use_max_area:
+        if is_save==True:
+            plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_G_2_1_is_stem_mat_before_max_area.jpg",is_stem_mat,cmap='gray')
+    
+        #doesn't work for unproc Alclat3_stem
+        num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(is_stem_mat.astype(np.uint8), 8)#8-connectivity
+        
+        if num_cc>1:#more than 1 area, don't count bgd
+            area = stats[1:, cv2.CC_STAT_AREA]
+            max_cc_label = np.where(area==max(area))[0]+1#+1 cuz we exclude 0 in previous line
+            is_stem_mat = (mat_cc==max_cc_label)*1
+        else:#no part is being selected as stem --> treat entire img as stem
+            is_stem_mat = is_stem_mat+1
+
+    #expand the stem part a bit by shrinking the not_stem
+    not_stem = -is_stem_mat+1
+    unif_radius = blur_radius*expand_radius_ratio
+    not_stem_exp =  to_binary(ndimage.uniform_filter(not_stem, size=unif_radius))
+    
+    is_stem_mat = (not_stem_exp==0)#invert
+    
+    #plot_gray_img(is_stem+not_stem)#expansion
+    if is_save==True:
+        plt.imsave(chunk_folder+"/s_"+str(img_re_idx)+"_G_2_expansion_foreground.jpg",is_stem_mat+not_stem,cmap='gray')
+    #plot_gray_img(is_stem)#1(white) for stem part
+    if is_save==True:
+        plot_gray_img(is_stem_mat)#1(white) for stem part
+        plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_G_3_is_stem_matG.jpg",is_stem_mat,cmap='gray')
+    return(is_stem_mat*1)#logical 2D array
+
+def unimodality_dip_test(path:str, plot_show = False) -> bool:
+    '''
+    #http://www.nicprice.net/diptest/Hartigan_1985_AnnalStat.pdf
+    #https://github.com/BenjaminDoran/unidip
+    Given the image and conduct dip test to see whether it's unimodal or not.
+    @path: image path
+    @plot_show: see whether plot the histogram or not
+    '''
+    img = cv2.imread(path,0)
+    img_array = img.ravel() 
+    #input an array
+    #return True if its unimodal distributed
+    data = np.msort(img_array)
+    #the probability of unimodal
+    uni_prob = dip.diptst(data)[1]
+    if uni_prob > 0.5:
+        #print(f'This image is unimodel distributed with probability of {uni_prob*100:.2f} %')
+        unimodality = True
+    else:
+        #print(f'This image is at least bimodel distributed with probability of {(1-uni_prob)*100:.2f} %')
+        unimodality = False
+    if plot_show:
+        plt.figure()
+        sns.distplot(img.ravel(), bins=256,kde= True, hist = True)
+        plt.title('Histogram of the image')
+        plt.show()
+    return unimodality
+
+def foregound_Th_OTSU(img_array,img_re_idx = '',chunk_folder = '', blur_radius = 10, expand_radius_ratio = 3, is_save = False, use_max_area = True):
+    '''
+    Given the raw img_array and used THRESH+OTSU to segement the foreground and used cc to get the biggest area
+    @based on the knowledge that the img is bimodal image (which histogram have 2 peaks)
+    '''
+    #convert color img to grayscale
+    gray = cv2.cvtColor(img_array,cv2.COLOR_BGR2GRAY)
+    #apply guassian filter to 
+    blur = cv2.GaussianBlur(gray,(5,5),0)
+    ret, is_stem_mat = cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU) #BINARY_INV CAN BE ANTOHER OPTION
+    if use_max_area:
+        if is_save==True:
+            plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_OTSU_2_1_is_stem_mat_before_max_area.jpg",is_stem_mat,cmap='gray')
+        num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(is_stem_mat.astype(np.uint8), 8)
+        if num_cc > 1:
+            area = stats[1:, cv2.CC_STAT_AREA]
+            max_cc_label = np.where(area==max(area))[0]+1#+1 cuz we exclude 0 in previous line
+            is_stem_mat = (mat_cc==max_cc_label)*1
+        else:#no part is being selected as stem --> treat entire img as stem
+            is_stem_mat = is_stem_mat + 1
+        #expand the stem part a bit by shrinking the not_stem
+        not_stem = -is_stem_mat+1
+        unif_radius = blur_radius*expand_radius_ratio
+        not_stem_exp =  to_binary(ndimage.median_filter(not_stem, size=unif_radius))
+        is_stem_mat = (not_stem_exp==0)#invert
+        num_cc, mat_cc, stats, centroids  = cv2.connectedComponentsWithStats(is_stem_mat.astype(np.uint8), 8)
+        if num_cc > 1:
+            area = stats[1:, cv2.CC_STAT_AREA]
+            max_cc_label = np.where(area==max(area))[0]+1#+1 cuz we exclude 0 in previous line
+            is_stem_mat = (mat_cc==max_cc_label)*1
+        else:#no part is being selected as stem --> treat entire img as stem
+            is_stem_mat = is_stem_mat + 1
+        #expand the stem part a bit by shrinking the not_stem
+        not_stem = -is_stem_mat+1
+        unif_radius = blur_radius*expand_radius_ratio
+        not_stem_exp = to_binary(ndimage.uniform_filter(not_stem, size=unif_radius))
+        is_stem_mat = (not_stem_exp==0)#invert
+
+     #plot_gray_img(is_stem+not_stem)#expansion
+    if is_save==True:
+        plt.imsave(chunk_folder+"/s_"+str(img_re_idx)+"_OTSU_2_expansion_foreground.jpg",is_stem_mat+not_stem,cmap='gray')
+    #plot_gray_img(is_stem)#1(white) for stem part
+    if is_save==True:
+        plot_gray_img(is_stem_mat)#1(white) for stem part
+        plt.imsave(chunk_folder + "/s_"+str(img_re_idx)+"_OTSU_3_is_stem_mat.jpg",is_stem_mat,cmap='gray')
+    return is_stem_mat*1
+
+def confusion_mat_idx(predict_inside_idx,true_tiff_path):
+    '''
+    Given the predict_inside_idx: img_idx of which the centroid of embolism is inside the mask
+    calculated and True tiff path: used to return true lable
+    Return confusion metric and corresponding idx 
+    '''
+    true_tiff = tiff.imread(true_tiff_path)#num_imgs x row_num x col_num
+    emb_img_idx_truth, emb_num_truth = get_img_idx_from_tiff(true_tiff)
+    img_numbs = true_tiff.shape[0]
+    #list of predict true index and inside mask
+    emb_img_idx_truth = set(emb_img_idx_truth)
+    #img idx in both list(emb_truth and predict inside)
+    con_tp = predict_inside_idx.intersection(emb_img_idx_truth)
+    # img idx in emb_truth but not in predict inside
+    con_fn = emb_img_idx_truth - predict_inside_idx
+    # img idx in predict but not emb_truth
+    con_fp = predict_inside_idx - emb_img_idx_truth
+    con_mat = np.ndarray((2,2), dtype=np.float32)
+    column_names = ['Predict 0', 'Predict 1']
+    row_names    = ['True 0','True 1']
+    con_mat[0,0] = img_numbs - len(con_tp) - len(con_fp) - len(con_fn)
+    con_mat[1,1] = len(con_tp)
+    con_mat[0,1] = len(con_fp)
+    con_mat[1,0] = len(con_fn)
+    con_df = pd.DataFrame(con_mat, columns=column_names, index=row_names)
+    return ([con_df,con_fp,con_fn])
+    
 def get_input_tif_path(use_predict_tif,has_processed,dir_path,img_folder):
     '''
     get input_tif_path based on user-specified arguments
