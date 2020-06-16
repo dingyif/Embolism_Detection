@@ -1,12 +1,14 @@
 ---
 title: "Point Process"
 author: "Diane Lu"
-date: "May 31st, 2020"
-output: html_document
+date: "June 15, 2020"
+output: 
+  html_document:
+    toc: TRUE
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 
 if (!require("RColorBrewer")) {
 install.packages("RColorBrewer")
@@ -32,7 +34,9 @@ library(ztable)
 options(ztable.type = "html")
 
 source("HawkesFunctions.R")
+source("Spatial_temporal_hawkes_fx.R")
 library(ggplot2)
+library(gridExtra)#for plotting subplots of ggplot
 library(magrittr)#for %>%
 ```
 
@@ -44,14 +48,14 @@ all_inter_event_dist_time <- read.csv(file.path(dir_path,'all_inter_event_dist_t
 all_folders_name_short <- unique(all_inter_event_dist_time$folder_name)
 all_species <- unique(all_inter_event_dist_time$species)
 all_rel_exp_idx <- unique(all_inter_event_dist_time$rel_exp_idx)
-```
 
-```{r, eval=FALSE, include=FALSE}
 total_ss<- read.csv(file.path(dir_path, 'total_summary_stats.csv'), header = TRUE)
 #times_1 <- total_ss[all_inter_event_dist_time$folder_name == folder_name_i,]$time_since_start.mins.
 ```
 
-## Inter-Event Time (aligning the first event time)
+## Event Time (aligning the first event time)
+
+The color represents species.
 
 ```{r plot_event_time}
 
@@ -98,11 +102,13 @@ for(folder_i in 1:length(all_folders_name_short)){
   y_prev <- y_i
 }
 
-title("Inter-Event Time (aligning the first event time)")
+title("Event Time (aligning the first event time)")
 ```
 
 
-## Fitting Poisson Process to Each Experiment
+## Poisson Process
+
+Fitting Poisson Process to Each Experiment
 
 Assumes inter-event times are independent.
 Intensity: expected inter-event times = 1/lambda
@@ -129,20 +135,24 @@ for(folder_i in 1:length(all_folders_name_short)){
   # b0 (=fitPP_1@coef) is actually log lambda
   # https://cran.r-project.org/web/packages/NHPoisson/NHPoisson.pdf
   # dplot = FALSE: suppress plotting. modSim=TRUE: suppress printing
+  # The maximization of the loglikelihood function can be done using two different optimization routines, optim or nlminb, selected in the argument minfun. Depending on the covariates included in the function, one routine can succeed to converge when the other fails.
   # [ref]: NHPoisson: An R Package for Fitting and Validating Nonhomogeneous Poisson Processes
   # TODO: include cc_area as intensity
+  
 
   intensity = exp(fitPP_1@coef)#fitted lambda for Poisson
   
-  #scaled inter_event_time (scaled by lambda)
+  #integrate intensity from t_i to t_{i+1}
+  # = intensity*(t_{i+1}-t_i) = intesnity*inter_event_time[i]
   lambda_res = inter_event_time*as.numeric(intensity)
   
   
   
   ## Histogram of inter-event times fitted by exponential dist
   #estimate the parameters for exponential dist
-  fit_exp <- fitdistr(inter_event_time, "exponential") 
-  hist(inter_event_time, freq = FALSE, breaks = 50, xlim = c(0, quantile(inter_event_time, 0.99)), main = "Histogram of Inter-Event Times", col = color_list[species_idx])
+  n_emb_img <- length(times_i)
+  fit_exp <- fitdistr(inter_event_time, "exponential")
+  hist(inter_event_time, freq = FALSE, breaks = 50, xlim = c(0, quantile(inter_event_time, 0.99)), main = paste("Histogram of Inter-Event Times\n","number of  embolized images =",n_emb_img), col = color_list[species_idx])
   curve(dexp(x, rate = fit_exp$estimate), from = 0, col = "red", add = TRUE)
   
   
@@ -173,12 +183,15 @@ for(folder_i in 1:length(all_folders_name_short)){
   # statistic (D): sup |F_n(x)-F(x)|: supreme of absolute difference of empirical CDF and 
   
   ## KS Plot
-  #exponential CDF
-  curve(pexp(x,1), min(lambda_res),max(lambda_res),col="Black",
-        xlab="Compensator",ylab="CDF",cex.lab=1.2, main = paste("CDF of Inter-Event Times \n p-val=",round(ks_pp$p.value,2), ", K-S statistic (D)=",round(ks_pp$statistic,2)))
   #empirical CDF
-  plot(ecdf(lambda_res), add=TRUE, do.points=FALSE, col.01line = "white", verticals=TRUE,col="Red", lwd=3.5, ylim=c(0,1))
-  legend("bottomright",c("Exponential CDF","Empirical CDF"),lty=1,lwd=2,col=c("Black","Red"),
+  plot(ecdf(lambda_res),do.points=FALSE, col.01line = "white", verticals=TRUE,col="Black", lwd=3, ylim=c(0,1),
+        xlab= expression(paste(Lambda,"(",t[i],",",t[i+1],")")),ylab="CDF", 
+       main = paste("CDF of Inter-Event Times \n p-val=",round(ks_pp$p.value,2), ",\n K-S statistic (D)=",round(ks_pp$statistic,2)))
+  
+  #exponential CDF
+  curve(pexp(x,1), min(lambda_res),max(lambda_res),col="Red", lty=1, lwd =2, add=TRUE,cex.lab=1.2)
+  
+  legend("bottomright",c("Exponential CDF","Empirical CDF"),lty=c(1,1),lwd=1,col=c("Red","Black"),
          bty="n",cex=1.2)
   
   PP_param_i <- c(folder_i, species_idx,intensity, ks_pp$p.value, ks_pp$statistic)
@@ -195,20 +208,358 @@ all_PP_param$not_few_emb <- 1.0
 all_PP_param$not_few_emb[few_emb_folders] <- 0.2#determines how transparent the bar will be when plotted
 ```
 
+QQ plot implying heavy-tailed, probably because is being fitted to a lot of events that are with small inter-event time.
+(In histogram, the number of small inter-event time is a lot higher than the fitted exponential curve.)
 
 
-
-## Fit Hawkes Process
+## Hawkes Process
 
 Kernel: exponential decay
 
+Conditional intensity:
 $$
 \lambda(t) = \lambda_0 + \alpha \sum_{i:t_i < t} e^{-\beta(t-t_i)}
 $$
+To ensure conditional intensity is non-negative and the parameters are meaningful, constraints need to be put on the parameter space. That is, $\lambda_0,\alpha \geq 0$ and $\beta > 0$. (If $\beta = 0$, it would result Inf in log-likelihood and other places that does integration.)
+
+*Reference: A Tutorial on Hawkes Processes for Events in Social Media (2017) Eq(1.12)*
+
+Let the observed event time be $\{t_1,...,t_n\}$ and let $N(t)$ denotes the observed numebr of events in time [0,t].
+
+Log likelihood:
+$$
+\begin{aligned}
+l(t_1...,t_n) &= - \int_{0}^{t_n} \lambda(t) dt +  \int_{0}^{t_n} \log(\lambda(t)) dN(t)\\
+&= - \{ \int_{0}^{t_n} \lambda_0 + \int_{0}^{t} \alpha e^{-\beta(t-u)} dN(u) dt \} +  \int_{0}^{t_n} \log(\lambda(t)) dN(t)\\
+&= -\lambda_0 t_n - \int_{0}^{t_n}  \int_{u}^{t_n} \alpha e^{-\beta(t-u)} dt dN(u) +  \int_{0}^{t_n} \log(\lambda(t)) dN(t)\\
+&= -\lambda_0 t_n + \frac{\alpha}{\beta} \int_{0}^{t_n} e^{-\beta(t_n-u)}-1 dN(u) +  \int_{0}^{t_n} \log(\lambda(t)) dN(t)\\
+&= -\lambda_0 t_n + \frac{\alpha}{\beta} \sum_{i=1}^{n} (e^{-\beta(t_n-t_i)}-1) + \sum_{i=1}^{n} \log (\lambda_0 + \alpha \sum_{k:t_k < t_i} e^{-\beta(t_i-t_k)})
+\end{aligned}
+$$
+
+Compensator is defined as below
+$$
+\Lambda(t) = \int_{0}^{t} \lambda(u) du
+$$
+and it follows an unit rate Poisson process.
+Hence, "the durations of the estimated residual process" defined as below follows an unit-rate exponential distribution.
+
+$$
+\Lambda(t_i,t_{i+1}) = \int_{t_i}^{t_{i+1}} \lambda(u) du
+$$
+Plug in our model for conditional intensity:
+
+$$
+\begin{aligned}
+\Lambda(t_i,t_{i+1}) &= \int_{t_i}^{t_{i+1}}  \lambda_0 du + \alpha \int_{t_i}^{t_{i+1}} \sum_{k:t_k < u} e^{-\beta(u-t_k)} du \\
+ &= \lambda_0 (t_{i+1} - t_i) + \alpha \sum_{k=1}^{i} \int_{t_i}^{t_{i+1}} e^{-\beta(u-t_k)} du \\
+ &= \lambda_0 (t_{i+1} - t_i) - \frac{\alpha}{\beta} \sum_{k=1}^{i} (e^{-\beta(t_{i+1}-t_k)} - e^{-\beta(t_{i}-t_k)}) 
+\end{aligned}
+$$
+
+
+*Reference: Analysis of Order Clustering Using High Frequency Data: A Point Process Approach (2012) (Eq 2.29)*
+
+
+
+
+The residual at time t is defined as below:
+
+
+$$
+R(t) = N(t) - \int_{0}^{t} \lambda(u) du
+$$
+The residual at time $t_i$ (Recall: observed event time$=\{ t_1, ..., t_n\}$) is then
+
+$$
+R(t_i) = N(t_i) - \sum_{j=1}^{i-1} \int_{t_j}^{t_{j+1}} \lambda(u) du
+$$
+
+Note that the integral is actually the duration of the residual process when i>=2.
+
+*Reference: Residual analysis for spatial point processes by Baddeley, Turner, Moller, and Hazelton (2005) *
+
+The scaled version (Pearson $h(u)=\frac{1}{\sqrt{\lambda(u)}}$):
+
+$$
+\begin{aligned}
+R'(t_i) &= \sum_{j=1}^{t_i} h(t_i)*1 -  \int_{0}^{t_i} h(u) \lambda(u)  du \\
+&= \sum_{j=1}^{t_i} \frac{1}{\sqrt{{\lambda(t_i)}}} -  \int_{0}^{t_i} \sqrt{\lambda(u)} du
+\end{aligned}
+$$
+
+The Pearson residual in the time interval $(t_i,t_{i+1}]$:
+$$
+\begin{aligned}
+r_{pearson}(t_i,t_{i+1}) &= \frac{1}{t_{i+1}-t_i}(R'(t_{i+1}) - R'(t_{i}))\\
+&=  \frac{1}{t_{i+1}-t_i}(\frac{1}{\sqrt{{\lambda(t_{i+1})}}} - \int_{t_i}^{t_{i+1}} \sqrt{\lambda(u)} du)
+\end{aligned}
+$$
+
+*Reference: NHPoisson: An R Package for Fitting and Validating Nonhomogeneous Poisson Processes (2013) Eq(3) (4)*
+
+Below, I've plotted $\{R(t_i)\}_{i=2}^{n}$ versus inter-event distance. The inter-event distance is currently defined as the difference between centroid column position (averaged in an image, if an image has multiple connected components).
+
+
+
 
 ```{r Hawkes_process, warning=FALSE}
 max_plot_row <- 2
 all_HP_param <- NULL
+not_conv_list <- NULL
+all_HP_pear_res <- NULL
+
+for(folder_i in 1:length(all_folders_name_short)){
+  if(folder_i%%max_plot_row==1){# a new fig
+    par(mfrow=c(max_plot_row,4),mar=c(5,4,7,3))#,oma = c(0, 0, 2, 0))# outer margin area (bottom,left,top,right)
+  }
+  folder_name_i<- all_folders_name_short[folder_i]
+  inter_event_dist_time <- all_inter_event_dist_time[all_inter_event_dist_time$folder_name == folder_name_i,]
+  inter_event_time <- inter_event_dist_time$inter_event_time.min.
+  times_i <- cumsum(inter_event_time)
+  times_i <- append(times_i, 0, after=0)#insert the first event time as 0
+  n_emb_img <- length(times_i)
+  
+  #get species to determine the color 
+  species_idx = as.numeric(unique(inter_event_dist_time["species"]))#as.numeric: factor df to integer
+  
+  ## fit hawkes process
+  # hawkes.par.original<-optim(par=rep(0.01,3), fn=uniHawkesNegLogLik,
+  #                   t=times_i, control = list(maxit = 1000) )#works the same as below
+  
+  #try different initialize value if doesn't converge
+  beta_initial_cand <- c(0.01,0.1,0.3)
+  for(beta_initial in beta_initial_cand){
+     hawkes.par<-optim(par=c(rep(0.01,2),beta_initial), fn=TemporalHawkesNegLogLik,
+                      t=times_i, control = list(maxit = 1000), lower=c(rep(0,2),1e-10) )#lower: to constrain the parameter space
+     if(hawkes.par$convergence==0){#no need to try other beta_initial if already converges
+       break
+     }
+  }
+  
+  
+  #continue if hawkes process converges...
+  #if doesn't converge, QQ plot of KS could encounter infinite axis error
+  if(hawkes.par$convergence!=0){
+    #optim output$converge:
+    #0 indicates successful convergence
+    #1 indicates that the iteration limit maxit had been reached
+    
+    print(paste("didn't converge, converge indicator:",hawkes.par$convergence))
+    print(folder_name_i)
+    print(hawkes.par$message)
+    #if hawkes.par$convergence is 52 and hawkes.par$message is ABNORMAL_TERMINATION_IN_LNSRCH
+    #could try different initialize value
+    #https://stackoverflow.com/questions/34663539/scipy-optimize-fmin-l-bfgs-b-returns-abnormal-termination-in-lnsrch
+    
+    not_conv_list <- c(not_conv_list,folder_name_i)
+    HP_param_i <- c(folder_i, species_idx,n_emb_img,rep(0,6))
+    all_HP_param <- rbind(all_HP_param,HP_param_i)
+  }else{
+    #fitted parameters
+    HP_lam0 <- hawkes.par$par[1]
+    HP_alpha <- hawkes.par$par[2]
+    HP_beta <- hawkes.par$par[3]
+    
+    # Lambda.test<-uniHawkesCompensator.Owen(lambda0=HP_lam0,alpha=HP_alpha,beta=HP_beta,times_i)
+    # Lambda.test <- Lambda.test[-1]
+    # same as below
+    
+    Lambda.test<-uniHawkesCompensator(lambda0=HP_lam0,alpha=HP_alpha,beta=HP_beta,
+                                      times_i)#different def of compensator than compensator_old
+    
+    ks.test(Lambda.test,"pexp")
+    
+    
+    
+    ## Histogram of inter-event times fitted by exponential dist
+    #estimate the parameters for exponential dist
+    fit_exp <- fitdistr(inter_event_time, "exponential") 
+    hist(inter_event_time, freq = FALSE, breaks = 50, xlim = c(0, quantile(inter_event_time, 0.99)), main = "Histogram of \n Inter-Event Times", col = color_list[species_idx])
+    curve(dexp(x, rate = fit_exp$estimate), from = 0, col = "red", add = TRUE)
+    
+    
+    
+    
+    ## QQ Plot using inter-event times
+    p <- ppoints(100)    # 100 equally spaced points on (0,1), excluding endpoints
+    q <- quantile(Lambda.test,p=p,na.rm=TRUE) # percentiles of the sample distribution
+    plot(qexp(p),q, xlab="Theoretical Quantiles",ylab="Empirical Quantiles",cex.lab=1.2,
+          pch=1,cex=1.1,col="Black", main = "Hawkes Process \n Q-Q Plot")
+    qqline(q, distribution=qexp,col="Red", lty=1, lwd=2.5)
+    
+    #folder name should be printed at top (side=3) of 2nd subplot
+    mtext(folder_name_i, side=3, line=5)
+    #https://www.r-graph-gallery.com/74-margin-and-oma-cheatsheet.html
+    
+    
+    
+    ## KS Statistic
+    ks_pp <- ks.test(Lambda.test,"pexp")
+    # Warning message:
+    # In ks.test(lambda_res, "pexp") :
+    #   ties should not be present for the Kolmogorov-Smirnov test
+    # Interpretation: The K-S test is for a "continuous distribution" and so your data should not contain any ties (repeated values).
+    # (exponetial dist is "continuous")
+    # statistic (D): sup |F_n(x)-F(x)|: supreme of absolute difference of empirical CDF and 
+    
+    ## KS Plot
+    #empirical CDF
+    plot(ecdf(Lambda.test),do.points=FALSE, col.01line = "white", verticals=TRUE,col="Black", lwd=3, ylim=c(0,1),
+        xlab= expression(paste(Lambda,"(",t[i],",",t[i+1],")")),ylab="CDF", 
+       main = paste("CDF of Inter-Event Times \n p-val=",round(ks_pp$p.value,2), ",\n K-S statistic (D)=",round(ks_pp$statistic,2)))
+    
+    #exponential CDF
+    curve(pexp(x,1), min(Lambda.test),max(Lambda.test),col="Red", lty=1, lwd =2, add=TRUE,cex.lab=1.2)
+    
+    legend("bottomright",c("Exponential CDF","Empirical CDF"),lty=c(1,1),lwd=1,col=c("Red","Black"),
+           bty="n",cex=0.7)
+    
+    
+    ## Residual plot
+    raw_res <- Raw_Res_Hawkes(compen=Lambda.test,N_t=1:(length(inter_event_time)+1))#N_t=1:n because we assumed there's only one event per img
+    raw_res_drop1 <- raw_res[-1]#drop R(t_1)
+    inter_event_dist <- inter_event_dist_time$inter_event_col_dist
+    plot(inter_event_dist,raw_res_drop1, main = "Residual vs \n Inter-Event Distance")
+    abline(h=0,col="red")
+    
+    
+    ## Pearson Residual
+    pear_res <- Pearson_Res_Hawkes(HP_lam0,HP_alpha,HP_beta,times_i)
+    all_HP_pear_res <- c(all_HP_pear_res, list(list(folder_index=folder_i,foldername=all_folders_name_short[folder_i],pearson_res=pear_res)))
+    
+    HP_param_i <- c(folder_i, species_idx,n_emb_img, HP_lam0,HP_alpha,HP_beta,ks_pp$p.value,ks_pp$statistic,1)
+    all_HP_param <- rbind(all_HP_param,HP_param_i)
+    
+  }
+  
+  
+  
+}
+
+```
+
+```{r HP_print_not_conv}
+#convert to dataframe for plotting later on
+all_HP_param_ori <- all_HP_param#just to keep a copy for debugging
+all_HP_param <- data.frame(all_HP_param)
+colnames(all_HP_param) <- c("folder_index","species","num_emb_img","lambda0","alpha","beta", "KS_pval", "KS_D","converge")
+row.names(all_HP_param) <- all_folders_name_short[unique(all_HP_param$folder_index)]
+
+all_HP_param$not_few_emb <- 1.0
+all_HP_param$not_few_emb[few_emb_folders] <- 0.2#determines how transparent the bar will be when plotted
+
+print("folders didn't converge (index and foldername):")
+print(not_conv_list)
+print(all_folders_name_short[not_conv_list])
+
+
+print(all_HP_param)
+```
+
+
+
+### Look at the fitted parameters of Hawkes Process
+
+Experiments with the number of embolized images < 20 are plotted with more transparent color.
+
+
+
+```{r HP_param, warning=FALSE}
+
+HP_param_no_few_emb <- all_HP_param[!(all_HP_param$folder_index %in% few_emb_folders),]
+#print(HP_param_no_few_emb)
+
+
+fig_lam0 <- ggplot(all_HP_param, aes(x = folder_index,y = lambda0, fill = factor(species))) + 
+  scale_fill_brewer(palette="Set1") +
+  geom_bar(stat = "identity",alpha=all_HP_param$not_few_emb) +
+  ggtitle("lambda0") +
+  coord_cartesian(ylim=c(min(HP_param_no_few_emb$lambda0),max(HP_param_no_few_emb$lambda0)))+ 
+  theme(legend.position = "bottom")
+  
+
+fig_alpha <- ggplot(all_HP_param, aes(x = folder_index,y = alpha, fill = factor(species))) + 
+  scale_fill_brewer(palette="Set1") +
+  geom_bar(stat = "identity",alpha=all_HP_param$not_few_emb) +
+  ggtitle("alpha") +
+  coord_cartesian(ylim=c(min(HP_param_no_few_emb$alpha),max(HP_param_no_few_emb$alpha)))+
+  theme(legend.position = "none")
+
+fig_beta <- ggplot(all_HP_param, aes(x = folder_index,y = beta, fill = factor(species))) + 
+  scale_fill_brewer(palette="Set1") +
+  geom_bar(stat = "identity",alpha=all_HP_param$not_few_emb) +
+  ggtitle("beta")+
+  coord_cartesian(ylim=c(min(HP_param_no_few_emb$beta),max(HP_param_no_few_emb$beta)))+
+  theme(legend.position = "none")#hide legend
+
+grid.arrange(fig_lam0, fig_alpha, fig_beta, nrow = 2)
+```
+
+
+
+```{r, results="asis"}
+param_2_methods <- merge(all_HP_param,all_PP_param,by="folder_index")
+col_keep <- c("folder_index","species.x","KS_pval.y","KS_pval.x","num_emb_img","converge")
+pval_2_methods <- param_2_methods[col_keep]#select certain columns (with the same order as col_keep)
+colnames(pval_2_methods) <- c("folder_index","species","KS_pval_PP","KS_pval_HP","num_emb_img","converge_HP")
+pval_2_methods$incr_p_val <- pval_2_methods$KS_pval_HP - pval_2_methods$KS_pval_PP
+#pval_2_methods <- pval_2_methods[,c(1,2,5,3,6,4,7)]#change the order of column for better printing
+ztable(pval_2_methods,caption="Change in P-values (Poisson vs Hawkes Process)") %>%
+    addRowColor(rows=1,bg="#C90000",color="white") %>%
+    addCellColor(condition=incr_p_val>0.0,cols=incr_p_val,color="emerald") %>%
+    addCellColor(condition=converge_HP<=0.0,cols=converge_HP,color="red") 
+```
+
+*If the fitting didn't converge, we'll place 0 as place-holders for all the estimates for parameters, KS p-value, and KS statistic.*
+
+As expected, the K-S p-value increases in most cases, as Hawkes process should have more flexibility than Poisson process. And for the cases where p-value doesn't increase are the experiments with less than 10 embolized images. It probably just means that there's more uncertainty. 
+
+
+
+
+## Spatio-Temporal Hawkes Process
+
+Let $s_1,..,s_n$ denote the event locations.
+
+Conditional intensity:
+
+$$
+\lambda(s,t) = \lambda_0 + \alpha \sum_{i:t_i < t} e^{-\beta(t-t_i)} e^{-\gamma(s-s_i)}
+$$
+
+$\lambda_0,\alpha \geq 0$ and $\beta,\gamma > 0$
+
+For every experiment, I normalized event locations ($s_i$) to [0,1].
+
+Log-likelihood:
+
+$$
+\begin{aligned}
+l(t_1...,t_n, s_1,...,s_n) &= - \int_{0}^{t_n} \int_{0}^{1} \lambda(s,t) ds dt + \sum_{i=1}^{n} \log(\lambda(s_i,t_i)) \\
+&=  -\lambda_0 t_n - \frac{\alpha}{\beta \gamma} \sum_{i=1}^{n} (e^{-\beta(t_n-t_i)}-1)(e^{-\gamma(1-s_i)}-e^{-\gamma(0-s_i)}) + \sum_{i=1}^{n} \log (\lambda_0 + \alpha \sum_{k:t_k < t_i} e^{-\beta(t_i-t_k)}e^{-\gamma(s_i-s_k)})
+\end{aligned}
+$$
+
+*Reference: A Review of Self-Exciting Spatio-Temporal Point Processes and Their Applications (2018) Eq(8)*
+
+
+The durations of the estimated residual process:
+
+$$
+\begin{aligned}
+\Lambda(t_i,t_{i+1}) &=  \int_{t_i}^{t_{i+1}}  \int_{0}^{1} \lambda(s,t) ds dt\\
+&= \int_{t_i}^{t_{i+1}}  \lambda_0 dt + \alpha \int_{t_i}^{t_{i+1}} \int_{0}^{1} \sum_{k:t_k < t} e^{-\beta(t-t_k)} e^{-\gamma(s-s_k)} ds dt \\
+&= \lambda_0 (t_{i+1} - t_i) + \alpha \sum_{k=1}^{i} \int_{t_i}^{t_{i+1}} e^{-\beta(t-t_k)} \int_{0}^{1}  e^{-\gamma(s-s_k)} ds dt \\
+&= \lambda_0 (t_{i+1} - t_i) - \frac{\alpha}{\gamma} \sum_{k=1}^{i} \int_{t_i}^{t_{i+1}} e^{-\beta(t-t_k)} (e^{-\gamma(1-s_k)} - e^{-\gamma(0-s_k)}) dt   \\
+&= \lambda_0 (t_{i+1} - t_i) + \frac{\alpha}{\beta \gamma} \sum_{k=1}^{i} (e^{-\beta(t_{i+1}-t_k)} - e^{-\beta(t_{i}-t_k)}) (e^{-\gamma(1-s_k)} - e^{-\gamma(0-s_k)}) 
+\end{aligned}
+$$
+
+```{r STHP, warning=FALSE}
+max_plot_row <- 2
+all_STHP_param <- NULL
+not_conv_list <- NULL
 
 for(folder_i in 1:length(all_folders_name_short)){
   if(folder_i%%max_plot_row==1){# a new fig
@@ -219,123 +570,177 @@ for(folder_i in 1:length(all_folders_name_short)){
   inter_event_time <- inter_event_dist_time$inter_event_time.min.
   times_i <- cumsum(inter_event_time)
   times_i <- append(times_i, 0, after=0)#insert the first event time as 0
-  
+  n_emb_img <- length(times_i)
   
   #get species to determine the color 
   species_idx = as.numeric(unique(inter_event_dist_time["species"]))#as.numeric: factor df to integer
   
+  #normalize column position to 0 ~ 1 for every folder.
+  col_pos <- total_ss[total_ss$folder_name == folder_name_i,]$cc_centroid_col
+  col_pos_min <- min(col_pos)
+  col_pos_max <- max(col_pos)
+  col_pos_norm <- (col_pos - col_pos_min)/col_pos_max
+  
   ## fit hawkes process
-  hawkes.par<-optim(par=rep(0.01,3), fn=uniHawkesNegLogLik, 
-                    t=times_i, control = list(maxit = 1000) )
-  #hawkes.par$convergence
-  
-  #fitted parameters
-  HP_lam0 <- hawkes.par$par[1]
-  HP_alpha <- hawkes.par$par[2]
-  HP_beta <- hawkes.par$par[3]
-  Lambda.test<-uniHawkesCompensator(lambda0=HP_lam0,alpha=HP_alpha,beta=HP_beta,
-                                    times_i)
-  ks.test(Lambda.test,"pexp")
+  #try different initialize value if doesn't converge
+  beta_initial_cand <- c(0.01,0.1,0.3)
+  for(beta_initial in beta_initial_cand){
+    hawkes.par<-optim(par=c(rep(0.01,2),rep(beta_initial,2)), fn=STHawkesNegLogLik,
+                    t=times_i, s=col_pos_norm, control = list(maxit = 1000), lower=c(rep(0,2),rep(1e-10,2))  )#lower: to constrain the parameter space
+     if(hawkes.par$convergence==0){#no need to try other beta_initial if already converges
+       break
+     }
+  }
   
   
-  
-  ## Histogram of inter-event times fitted by exponential dist
-  #estimate the parameters for exponential dist
-  fit_exp <- fitdistr(inter_event_time, "exponential") 
-  hist(inter_event_time, freq = FALSE, breaks = 50, xlim = c(0, quantile(inter_event_time, 0.99)), main = "Histogram of Inter-Event Times", col = color_list[species_idx])
-  curve(dexp(x, rate = fit_exp$estimate), from = 0, col = "red", add = TRUE)
-  
-  
-  
-  
-  ## QQ Plot using inter-event times
-  p <- ppoints(100)    # 100 equally spaced points on (0,1), excluding endpoints
-  q <- quantile(Lambda.test,p=p,na.rm=TRUE) # percentiles of the sample distribution
-  plot(qexp(p),q, xlab="Theoretical Quantiles",ylab="Empirical Quantiles",cex.lab=1.2,
-        pch=1,cex=1.1,col="Black", main = "Hawkes Process")
-  qqline(q, distribution=qexp,col="Red", lty=1, lwd=2.5)
-  
-  #folder name should be printed at top (side=3) of 2nd subplot
-  mtext(folder_name_i, side=3, line=5)
-  #https://www.r-graph-gallery.com/74-margin-and-oma-cheatsheet.html
-  
-  
-  
-  ## KS Statistic
-  ks_pp <- ks.test(Lambda.test,"pexp")
-  # Warning message:
-  # In ks.test(lambda_res, "pexp") :
-  #   ties should not be present for the Kolmogorov-Smirnov test
-  # Interpretation: The K-S test is for a "continuous distribution" and so your data should not contain any ties (repeated values).
-  # (exponetial dist is "continuous")
-  # statistic (D): sup |F_n(x)-F(x)|: supreme of absolute difference of empirical CDF and 
-  
-  ## KS Plot
-  #exponential CDF
-  curve(pexp(x,1), min(Lambda.test),max(Lambda.test),col="Black",
-        xlab="Compensator",ylab="CDF",cex.lab=1.2, main = paste("CDF of Inter-Event Times \n p-val=",round(ks_pp$p.value,2), ", K-S statistic (D)=",round(ks_pp$statistic,2)))
-  #empirical CDF
-  plot(ecdf(Lambda.test), add=TRUE, do.points=FALSE, col.01line = "white", verticals=TRUE,col="Red", lwd=3.5, ylim=c(0,1))
-  legend("bottomright",c("Exponential CDF","Empirical CDF"),lty=1,lwd=2,col=c("Black","Red"),
-         bty="n",cex=1.2)
-  
-  HP_param_i <- c(folder_i, species_idx,HP_lam0,HP_alpha,HP_beta,ks_pp$p.value,ks_pp$statistic)
-  all_HP_param <- rbind(all_HP_param,HP_param_i)
+  #continue if hawkes process converges...
+  #if doesn't converge, QQ plot of KS could encounter infinite axis error
+  if(hawkes.par$convergence!=0){
+    #optim output$converge:
+    #0 indicates successful convergence
+    #1 indicates that the iteration limit maxit had been reached
+    
+    #print("didn't converge:")
+    #print(folder_name_i)
+    not_conv_list <- c(not_conv_list,folder_name_i)
+    HP_param_i <- c(folder_i, species_idx,n_emb_img,rep(0,7))
+    all_STHP_param <- rbind(all_STHP_param,HP_param_i)
+  }else{
+    #fitted parameters
+    HP_lam0 <- hawkes.par$par[1]
+    HP_alpha <- hawkes.par$par[2]
+    HP_beta <- hawkes.par$par[3]
+    HP_gamma <- hawkes.par$par[4]
+    Lambda.test<-STHawkesCompensator(lambda0=HP_lam0,alpha=HP_alpha,beta=HP_beta,gamma=HP_gamma,
+                                     t=times_i,s=col_pos_norm)#different def of compensator
+    ks.test(Lambda.test,"pexp")
+    
+    
+    
+    ## Histogram of inter-event times fitted by exponential dist
+    #estimate the parameters for exponential dist
+    fit_exp <- fitdistr(inter_event_time, "exponential") 
+    hist(inter_event_time, freq = FALSE, breaks = 50, xlim = c(0, quantile(inter_event_time, 0.99)), main = "Histogram of Inter-Event Times", col = color_list[species_idx])
+    curve(dexp(x, rate = fit_exp$estimate), from = 0, col = "red", add = TRUE)
+    
+    
+    
+    
+    ## QQ Plot using inter-event times
+    p <- ppoints(100)    # 100 equally spaced points on (0,1), excluding endpoints
+    q <- quantile(Lambda.test,p=p,na.rm=TRUE) # percentiles of the sample distribution
+    plot(qexp(p),q, xlab="Theoretical Quantiles",ylab="Empirical Quantiles",cex.lab=1.2,
+          pch=1,cex=1.1,col="Black", main = "Spatio-Temporal Hawkes Process \n Q-Q Plot")
+    qqline(q, distribution=qexp,col="Red", lty=1, lwd=2.5)
+    
+    #folder name should be printed at top (side=3) of 2nd subplot
+    mtext(folder_name_i, side=3, line=5)
+    #https://www.r-graph-gallery.com/74-margin-and-oma-cheatsheet.html
+    
+    
+    
+    ## KS Statistic
+    ks_pp <- ks.test(Lambda.test,"pexp")
+    # Warning message:
+    # In ks.test(lambda_res, "pexp") :
+    #   ties should not be present for the Kolmogorov-Smirnov test
+    # Interpretation: The K-S test is for a "continuous distribution" and so your data should not contain any ties (repeated values).
+    # (exponetial dist is "continuous")
+    # statistic (D): sup |F_n(x)-F(x)|: supreme of absolute difference of empirical CDF and 
+    
+    ## KS Plot
+    #empirical CDF
+    plot(ecdf(Lambda.test),do.points=FALSE, col.01line = "white", verticals=TRUE,col="Black", lwd=3, ylim=c(0,1),
+        xlab= expression(paste(Lambda,"(",t[i],",",t[i+1],")")),ylab="CDF", 
+       main = paste("CDF of Inter-Event Times \n p-val=",round(ks_pp$p.value,2), ",\n K-S statistic (D)=",round(ks_pp$statistic,2)))
+    #exponential CDF
+    curve(pexp(x,1), min(Lambda.test),max(Lambda.test),col="Red", lty=1, lwd =2, add=TRUE,
+          xlab="Durations of the estimated residual process",ylab="CDF",cex.lab=1.2)
+    
+    legend("bottomright",c("Exponential CDF","Empirical CDF"),lty=c(1,1),lwd=1,col=c("Red","Black"),
+           bty="n",cex=1.2)
+    
+    HP_param_i <- c(folder_i, species_idx,n_emb_img,HP_lam0,HP_alpha,HP_beta,HP_gamma,ks_pp$p.value,ks_pp$statistic,1)
+    all_STHP_param <- rbind(all_STHP_param,HP_param_i)
+    
+  }
   
 }
-
-
 ```
 
-### Look at the fitted parameters of Hawkes Process
-
-Experiments with the number of embolized images < 20 are plotted with more transparent color.
 
 
+### Look at the fitted parameters of Spatial-Temporal Hawkes Process
 
-```{r HP_param, warning=FALSE}
-all_HP_param <- data.frame(all_HP_param)
-row.names(all_HP_param) <- all_folders_name_short
-colnames(all_HP_param) <- c("folder_index","species","lambda0","alpha","beta", "KS_pval", "KS_D")
-all_HP_param$not_few_emb <- 1.0
-all_HP_param$not_few_emb[few_emb_folders] <- 0.2#determines how transparent the bar will be when plotted
-print(all_HP_param)
+```{r sTHP_print_not_conv}
+#convert to df for plotting later on
+all_STHP_param <- data.frame(all_STHP_param)
+colnames(all_STHP_param) <- c("folder_index","species","num_emb_img","lambda0","alpha","beta","gamma", "KS_pval", "KS_D","converge")
+row.names(all_STHP_param) <- all_folders_name_short[unique(all_STHP_param$folder_index)]
 
-HP_param_no_few_emb <- all_HP_param[!(all_HP_param$folder_index %in% few_emb_folders),]
-#print(HP_param_no_few_emb)
+all_STHP_param$not_few_emb <- 1.0
+all_STHP_param$not_few_emb[few_emb_folders] <- 0.2#determines how transparent the bar will be when plotted
 
 
-ggplot(all_HP_param, aes(x = folder_index,y = lambda0, fill = factor(species))) + 
+print("folders didn't converge (index, foldername, number of embolized images):")
+print(not_conv_list)
+print(all_folders_name_short[not_conv_list])
+print(all_STHP_param$num_emb_img[not_conv_list])
+
+
+print(all_STHP_param)
+```
+
+
+```{r STHP_param, warning=FALSE}
+STHP_param_no_few_emb <- all_STHP_param[!(all_STHP_param$folder_index %in% few_emb_folders),]
+
+fig_lam0 <- ggplot(all_STHP_param, aes(x = folder_index,y = lambda0, fill = factor(species))) + 
   scale_fill_brewer(palette="Set1") +
-  geom_bar(stat = "identity",alpha=all_HP_param$not_few_emb) +
+  geom_bar(stat = "identity",alpha=all_STHP_param$not_few_emb) +
   ggtitle("lambda0") +
-  coord_cartesian(ylim=c(min(HP_param_no_few_emb$lambda0),max(HP_param_no_few_emb$lambda0)))
-  
+  coord_cartesian(ylim=c(min(STHP_param_no_few_emb$lambda0),max(STHP_param_no_few_emb$lambda0)))+ 
+  theme(legend.position = "bottom")
 
-ggplot(all_HP_param, aes(x = folder_index,y = alpha, fill = factor(species))) + 
+fig_gamma <- ggplot(all_STHP_param, aes(x = folder_index,y = gamma, fill = factor(species))) + 
   scale_fill_brewer(palette="Set1") +
-  geom_bar(stat = "identity",alpha=all_HP_param$not_few_emb) +
+  geom_bar(stat = "identity",alpha=all_STHP_param$not_few_emb) +
+  ggtitle("gamma")+
+  coord_cartesian(ylim=c(min(STHP_param_no_few_emb$gamma),max(STHP_param_no_few_emb$gamma)))+
+  theme(legend.position = "none")#hide legend
+
+fig_alpha <- ggplot(all_STHP_param, aes(x = folder_index,y = alpha, fill = factor(species))) + 
+  scale_fill_brewer(palette="Set1") +
+  geom_bar(stat = "identity",alpha=all_STHP_param$not_few_emb) +
   ggtitle("alpha") +
-  coord_cartesian(ylim=c(min(HP_param_no_few_emb$alpha),max(HP_param_no_few_emb$alpha)))
+  coord_cartesian(ylim=c(min(STHP_param_no_few_emb$alpha),max(STHP_param_no_few_emb$alpha)))+
+  theme(legend.position = "none")
 
-ggplot(all_HP_param, aes(x = folder_index,y = beta, fill = factor(species))) + 
+fig_beta <- ggplot(all_STHP_param, aes(x = folder_index,y = beta, fill = factor(species))) + 
   scale_fill_brewer(palette="Set1") +
-  geom_bar(stat = "identity",alpha=all_HP_param$not_few_emb) +
+  geom_bar(stat = "identity",alpha=all_STHP_param$not_few_emb) +
   ggtitle("beta")+
-  coord_cartesian(ylim=c(min(HP_param_no_few_emb$beta),max(HP_param_no_few_emb$beta)))
+  coord_cartesian(ylim=c(min(STHP_param_no_few_emb$beta),max(STHP_param_no_few_emb$beta)))+
+  theme(legend.position = "none")#hide legend
+
+grid.arrange(fig_lam0, fig_alpha, fig_beta, fig_gamma, nrow = 2)
 ```
-
-
 
 ```{r, results="asis"}
-param_2_methods <- merge(all_HP_param,all_PP_param,by="folder_index")
-col_keep <- c("folder_index","species.x","KS_pval.x","KS_pval.y","not_few_emb.x")
-pval_2_methods <- param_2_methods[, colnames(param_2_methods) %in% col_keep]
-colnames(pval_2_methods) <- c("folder_index","species","KS_pval_HP","not_few_emb","KS_pval_PP")
-pval_2_methods$incr_p_val <- pval_2_methods$KS_pval_HP - pval_2_methods$KS_pval_PP
-pval_2_methods <- pval_2_methods[,c(1,2,5,3,6,4)]#change the order of column for better printing
-ztable(pval_2_methods,caption="Change in P-values") %>%
+param_2_methods <- merge(all_STHP_param,all_HP_param,by="folder_index")
+col_keep <- c("folder_index","species.x","KS_pval.y","KS_pval.x","num_emb_img.x","converge.y","converge.x")
+pval_2_methods <- param_2_methods[col_keep]
+colnames(pval_2_methods) <- c("folder_index","species","KS_pval_HP","KS_pval_STHP","num_emb_img","converge_HP","converge_STHP")
+pval_2_methods$incr_p_val <- pval_2_methods$KS_pval_STHP - pval_2_methods$KS_pval_HP
+#pval_2_methods <- pval_2_methods[,c(1,2,5,3,6,4,7)]#change the order of column for better printing
+ztable(pval_2_methods,caption="Change in P-values (Temporal vs Spatial-Temporal Hawkes Process)") %>%
     addRowColor(rows=1,bg="#C90000",color="white") %>%
-    addCellColor(condition=incr_p_val>0.0,cols=incr_p_val,color="emerald") 
+    addCellColor(condition=incr_p_val>0.0,cols=incr_p_val,color="emerald") %>%
+    addCellColor(condition=converge_STHP<=0.0,cols=converge_STHP,color="red") %>%
+    addCellColor(condition=converge_HP<=0.0,cols=converge_HP,color="red")
 ```
 
+
+TODO: Deviance Residual?(ref:RESIDUAL ANALYSIS METHODS FOR SPACE-TIME POINT
+PROCESSES 4.3) or R test? (ref:Assessment of Point Process Models for
+Earthquake Forecasting)
