@@ -25,7 +25,7 @@ output_dir = args.output_root_folder
 output_version_name = 'true_tif'
 disk_path = '/rigel/stats/projects/emb_proj/Processed0522/'
 #arguments for preprocessed folder
-has_processed = True
+has_processed = args.has_processed
 #use the below arguments and save into different folder for outputs
 use_predict_tif = False #(False):use true labels tif . (True or has_processed=False): use predict.tif 
 use_txt = False #use true_positive,fp,fn txt files for img index
