@@ -16,11 +16,6 @@ import datetime
 
 
 
-#add folder to the system-path at runtime, for importing file in another folder
-if '../shiny_files' not in sys.path:
-    sys.path.insert(0, '../shiny_files')
-import func_get_data as fx
-
 '''
 only include the parts to output all_inter_event_dist_time.csv and total_summary_stats.csv
 '''
@@ -215,5 +210,13 @@ all_inter_event_dist_time.to_csv(os.path.join(input_dir,'all_inter_event_dist_ti
 
 total_summary_stats.to_csv(os.path.join(input_dir,'total_summary_stats.csv'),index=True)
 
+def print_used_time(start_time):
+    #time
+    finish_time = datetime.datetime.now()
+    seconds_in_day = 24 * 60 * 60
+    difference = finish_time - start_time
+    diff_min_sec = divmod(difference.days * seconds_in_day + difference.seconds, 60)
+    print('used time: ',diff_min_sec[0],'min ',diff_min_sec[1],'sec')
+    return(diff_min_sec)
 
-fx.print_used_time(start_time)
+print_used_time(start_time)
