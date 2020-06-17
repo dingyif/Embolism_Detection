@@ -39,6 +39,7 @@ uniHawkesCompensator<-function(lambda0,alpha,beta,t){
   #[Diane]
   #[Ref]Analysis of Order Clustering Using High Frequency Data: A Point Process Approach (Eq 2.29)
   #t should include the 1st event time
+  #outputs Lambda(t_i,t_{i+1})
   
   n<-length(t)#number of event
   Lambda<-rep(0,n-1)
@@ -53,7 +54,20 @@ uniHawkesCompensator<-function(lambda0,alpha,beta,t){
   return(Lambda)
 }
 
-
+uniHawkesCompensatorPoisson<-function(lambda0,alpha,beta,t){
+  #[Diane]
+  #[Ref]Analysis of Order Clustering Using High Frequency Data: A Point Process Approach (Eq 2.29)
+  #t should include the 1st event time
+  #outputs Lambda(t_i) for i=1,...,(n)
+  
+  n<-length(t)#number of event
+  Lambda<-rep(0,n)
+  
+  dur_res_proc <- uniHawkesCompensator(lambda0,alpha,beta,t)
+  Lambda[2:n] <- cumsum(dur_res_proc)
+  #Lambda(t_1) =0 because t_1 = 0
+  return(Lambda)
+}
 
 uniHawkesNegLogLik <- function(params=list(lambda0,alpha,beta), t) {
   #https://radhakrishna.typepad.com/mle-of-hawkes-self-exciting-process.pdf
