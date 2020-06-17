@@ -984,9 +984,9 @@ colnames(all_two_sided_p_val_df) <- c("folder_index","est_mean","std_err","two_s
 
 Null Hypothesis: 
 
-+ Two-sided: whether the mean difference (of STHP-HP paired value) is equal to 0?
++ Two-sided: mean difference (of HP-STHP paired value) is equal to 0
 
-+ One-sided: whether the mean difference is less than 0? (alternative hypothesis is mean difference greater than 0)
++ One-sided: mean difference is less than 0. (alternative hypothesis is mean difference greater than 0)
 
 ```{r, results="asis"}
 folder_idx_species <- all_STHP_param[c("folder_index","species")]#want to include species in the table below
