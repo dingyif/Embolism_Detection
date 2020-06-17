@@ -7,7 +7,8 @@ import func_get_data as fx
 import tifffile as tiff
 
 parser  = argparse.ArgumentParser(description='Server version for get_data.py')
-parser.add_argument('--output_root_folder', type = str, default="")
+parser.add_argument('--disk_path', type = str, default="/rigel/stats/projects/emb_proj/Processed0522")
+parser.add_argument('--output_root_folder', type = str, default="/rigel/stats/projects/emb_proj/output_get_data")
 parser.add_argument('--folder_idx_start', type = int, help = 'Start folder index: 0')
 parser.add_argument('--folder_idx_end', type = int, help = 'End folder index: 52')
 parser.add_argument('--has_processed', type = bool, help = 'Whether the folder is processed or not')
@@ -17,13 +18,12 @@ args = parser.parse_args()
 User-specific input arguments from parser
 '''
 #in server we have total 53 folders, only 22 folders will contain stem, so the idx range should be 0-22
-img_folder_rel_args = args.img_folder_rel
 folder_idx_start = args.folder_idx_start
 folder_idx_end = args.folder_idx_end
 output_dir = args.output_root_folder
 #directory where the folder located.
 output_version_name = 'true_tif'
-disk_path = '/rigel/stats/projects/emb_proj/Processed0522/'
+disk_path = args.disk_path
 #arguments for preprocessed folder
 has_processed = args.has_processed
 #use the below arguments and save into different folder for outputs
