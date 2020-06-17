@@ -32,6 +32,7 @@ use_txt = False #use true_positive,fp,fn txt files for img index
 #default is to plot tp emb.
 plot_fn = True #(TRUE):plot fn emb. from false_positive_index.txt 
 plot_fp = False 
+sl_tag = 'stem'#tag for stem or leaf
 
 '''
 Paths
@@ -65,7 +66,7 @@ for folder_path in all_folder_dir:
 all_subfolder_stem_exp_dir = []
 for subfolder_exp_dir in all_subfolder_exp_dir:
     #check whether stem inside the string or not
-    if 'stem' in subfolder_exp_dir.lower():
+    if sl_tag in subfolder_exp_dir.lower():
         all_subfolder_stem_exp_dir.append(subfolder_exp_dir)
 
 
@@ -73,10 +74,13 @@ for subfolder_exp_dir in all_subfolder_exp_dir:
 for folder_idx in range(folder_idx_start,folder_idx_end+1):
     # '/rigel/stats/projects/emb_proj/Processed0522/Alchornea_latifolia'
     dir_path = all_subfolder_stem_exp_dir[folder_idx]
-    # folder_name: 500_alclat7_stem_done_processed
-    folder_name = os.path.split(dir_path)[-1]
-    #in case of some folder name involved ' '
-    folder_name_short = folder_name.replace(' ','_')
+    # folder_name: alclat7 or tabhet6 (good - orlando)
+    folder_name = dir_path.split(os.sep)[-4].lower()
+    folder_name_short = folder_name.replace(" ", "").split("(")[0] +'_'+sl_tag
+    #remove spaces and split by left bracket to get 'tabhet6', then add '_stem'
+    
+    folder_name
+    
     #used true label, imgs are acutally located in folder_path
     img_folder = dir_path
 
