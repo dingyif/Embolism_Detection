@@ -10,8 +10,6 @@ import pandas as pd
 import numpy as np 
 import argparse
 import pickle#save multiple variables into a pickle file
-import plotly.offline as pyo
-pyo.init_notebook_mode()
 
 from tqdm import tqdm_notebook as tqdm
 from datetime import datetime
