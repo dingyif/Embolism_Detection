@@ -5,13 +5,11 @@
 
 # In[1]:
 
-import os,sys
+import os
 import pandas as pd
 import numpy as np 
 import argparse
 import pickle#save multiple variables into a pickle file
-
-from tqdm import tqdm_notebook as tqdm
 import datetime
 
 
@@ -106,26 +104,15 @@ def compute_col_dist(cc_emb_info,x_mean,plot_mat_time):
 
 def summary_statistics_all(n_folders):
     total_summary_stats = pd.DataFrame()
-    for i in tqdm(range(n_folders)):
+    #for i in tqdm(range(n_folders)):
+    for i in range(n_folders):
         cc_emb_info, x_mean, folder_name_short , plot_mat_time = compute_cc_emb_info(i)#[Diane 0522]
         summary_statistics = compute_col_dist(cc_emb_info,x_mean, plot_mat_time)
         summary_statistics['folder_name'] = folder_name_short.lower()#[Diane 0522]
         total_summary_stats = total_summary_stats.append(summary_statistics)
+        print("finish ",(i+1),"/",n_folders," folder in summary_statistics_all")
     return total_summary_stats
 
-
-# # Cumulative embolized area vs time
-
-# In[6]:
-
-
-cc_area_summary = pd.DataFrame()
-for i in tqdm(range(n_folders)):
-    cc_emb_info, x_mean, folder_name_short, _ = compute_cc_emb_info(i)#[Diane 0522]
-    summary_statistics = cc_emb_info.groupby('time_since_start(mins)').agg({'cc_area':'sum','number_emb':'median'}).reset_index()
-    summary_statistics['folder_name'] = folder_name_short.lower()
-    summary_statistics['cumsum_cc_area'] = summary_statistics.cc_area.cumsum()/summary_statistics.cc_area.cumsum().max()
-    cc_area_summary = cc_area_summary.append(summary_statistics)
 
 
 
@@ -152,6 +139,7 @@ all_folders_name_short = np.unique(total_summary_stats.folder_name)#[Diane 0522]
 #input:total_summary_stats
 all_inter_event_dist_time = pd.DataFrame()
 all_folders_name_short = np.unique(total_summary_stats.folder_name)#[Diane 0522]
+i = 1#for printing
 for folder_name_short in all_folders_name_short:#folder_idx = 0
     ss = total_summary_stats[total_summary_stats.folder_name == folder_name_short]
     #print(ss)#8 cols: cc_width,cc_height, cc_area, cc_centroid_row, cc_centroid_col, time_since_start(mins), cc_cen_col_dist_mean, folder_name
@@ -190,6 +178,8 @@ for folder_name_short in all_folders_name_short:#folder_idx = 0
     #fig.show()
     
     all_inter_event_dist_time = all_inter_event_dist_time.append(inter_event_dist_time)
+    print("finish ",i,"/",n_folders," folder in all_inter_event_dist_time")
+    i += 1
     
 #return all_inter_event_dist_time
 
