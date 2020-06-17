@@ -5,6 +5,9 @@ import numpy as np
 import pickle
 import func_get_data as fx
 import tifffile as tiff
+from func import print_used_time
+import datetime
+start_time = datetime.datetime.now()
 
 parser  = argparse.ArgumentParser(description='Server version for get_data.py')
 parser.add_argument('--disk_path', type = str, default="/rigel/stats/projects/emb_proj/Processed0522")
@@ -191,3 +194,4 @@ for folder_idx in range(folder_idx_start,folder_idx_end+1):
                      'diff_time_list_int':diff_time_list_int, 'embolism_table':embolism_table,  
                      'plot_mat_all':plot_mat_all, 'plot_tiff':plot_tiff, 'plot_mat_time': plot_mat_time}, f)#'emb_table_df':emb_t_df,
     
+    print_used_time(start_time)
