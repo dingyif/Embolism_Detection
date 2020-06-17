@@ -194,6 +194,7 @@ def get_input_tif_path(use_predict_tif,has_processed,dir_path,img_folder):
         input_tif_folder = dir_path
         input_tif_path = os.path.join(input_tif_folder,input_tif_name)
     else:
+        match = False
         #paths for true.tif
         tiff_paths = sorted(glob.glob(img_folder + '/*.tif'))
         #make sure have tif file in there for the processed ones
