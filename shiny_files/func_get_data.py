@@ -18,6 +18,15 @@ from PIL import Image
 import tifffile as tiff
 import seaborn as sns
 
+def print_used_time(start_time):
+    #time
+    finish_time = datetime.datetime.now()
+    seconds_in_day = 24 * 60 * 60
+    difference = finish_time - start_time
+    diff_min_sec = divmod(difference.days * seconds_in_day + difference.seconds, 60)
+    print('used time: ',diff_min_sec[0],'min ',diff_min_sec[1],'sec')
+    return(diff_min_sec)
+
 def calc_metric(con_mat):
     t_neg = con_mat['Predict 0']['True 0']
     t_pos = con_mat['Predict 1']['True 1']
