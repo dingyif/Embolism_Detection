@@ -12,7 +12,7 @@ import argparse
 import pickle#save multiple variables into a pickle file
 
 from tqdm import tqdm_notebook as tqdm
-from datetime import datetime
+import datetime
 
 
 
@@ -36,7 +36,7 @@ args = parser.parse_args()
 
 version_name = 'true_tif' #'v11'
 input_dir = args.input_dir
-#input_dir = os.path.join(os.getcwd(),'..','..','emb_data')
+#input_dir = 'F:\output_get_data'
 
 #use the below arguments and save different csv file
 use_predict_tif = False #(False):use true labels tif . (True or has_processed=False): use predict.tif 
