@@ -213,7 +213,10 @@ def get_input_tif_path(use_predict_tif,has_processed,dir_path,img_folder):
                     match = True
                     break
         if match==False:
-            sys.exit("Error: no match for true tif file")
+            if 'clean' in up_2_date_tiff.lower():
+                input_tif_path = up_2_date_tiff
+            else:
+                sys.exit("Error: no match for true tif file")
         else:
             input_tif_path = up_2_date_tiff
     return(input_tif_path)
@@ -399,9 +402,12 @@ def get_date_time_from_filenames(all_files,img_extension):
     time_str_list = [file.split(img_extension)[0] for file in all_files]
     if 'tl' in time_str_list[0]:
         time_str_clean_ls = ['-'.join(time_str.split('_')[-2:]) for time_str in time_str_list]
+        #take care of the duplicate
+        time_str_clean_ls = list(set(time_str_clean_ls))
         date_time_list = [datetime.datetime.strptime(dt_str,'%Y%m%d-%H%M%S') for dt_str in time_str_clean_ls]
     else:
         date_time_list = [datetime.datetime.strptime(dt_str,'%Y%m%d-%H%M%S') for dt_str in time_str_list]
+    
     return(date_time_list)
 
 def get_time_wrt_start_time(date_time_list_ori,num_imgs,emb_num_plot,emb_img_idx_plot):
