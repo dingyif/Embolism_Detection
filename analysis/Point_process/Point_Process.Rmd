@@ -933,7 +933,7 @@ for(folder_i in 1:length(all_folders_name_short)){
     
     #plot pearson residual for 2 models together
     num_res <- length(HP_pear_res)
-    both_pear_res = data.frame(time = c(1:num_res,1:num_res),
+    both_pear_res <- data.frame(time = c(1:num_res,1:num_res),
                   model =  c(rep("Temporal",num_res),rep("Spatiotemporal",num_res)),
                   groupcd= c(rep(1,num_res),rep(2,num_res)),
                   pearson_res = c(HP_pear_res,STHP_pear_res)
@@ -950,10 +950,13 @@ for(folder_i in 1:length(all_folders_name_short)){
     # pd <- paired(HP_pear_res, STHP_pear_res)
     # plot(pd, type = "profile") + theme_bw()
     
-    fig_boxplot <- ggboxplot(both_pear_res, x = "model", y = "pearson_res", 
-          color = "model", palette = c("#00BFC4","#F8766D"),
-          order = c("Temporal", "Spatiotemporal"),
-          ylab = "Pearson Residuals", xlab = "Models")+ggtitle("Pearson Residuals Box Plot")
+    paired_diff <- data.frame(time = c(1:num_res),
+                  model =  rep("Temporal-Spatiotemporal",num_res),
+                  pearson_res = HP_pear_res-STHP_pear_res
+                  )
+    
+    fig_boxplot <- ggboxplot(paired_diff, x = "model", y = "pearson_res", 
+          ylab = "Paired Difference of Pearson Residuals")+ggtitle("Box Plot of Pearson Residuals \n Paired Difference ")
     
     grid.arrange(fig_time, fig_boxplot, ncol = 2)
     
@@ -994,7 +997,7 @@ t_test_pvals_no_species <- merge(all_two_sided_p_val_df,all_one_sided_p_val_df,b
 t_test_pvals <- merge(folder_idx_species,t_test_pvals_no_species, by="folder_index")
 row.names(t_test_pvals) <- all_folders_name_short[t_test_pvals$folder_index]
 
-ztable(t_test_pvals,caption="Change in P-values of Paired T-test (Temporal vs Spatial-Temporal Hawkes Process)") %>%
+ztable(t_test_pvals,caption="Paired Samples T-test (two-sided and one-sided) on Pearson Residuals of Two Models (Temporal and Spatiotemporal Hawkes Process)") %>%
     addRowColor(rows=1,bg="#C90000",color="white") %>%
     addCellColor(condition=two_sided_p_val>0.05,cols=two_sided_p_val,color="blue") %>%
     addCellColor(condition=one_sided_p_val<=0.05,cols=one_sided_p_val,color="emerald") %>%
