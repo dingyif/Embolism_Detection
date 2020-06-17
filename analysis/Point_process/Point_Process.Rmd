@@ -1,7 +1,7 @@
 ---
 title: "Point Process"
 author: "Diane Lu"
-date: "June 15, 2020"
+date: "June 17, 2020"
 output: 
   html_document:
     toc: TRUE
@@ -572,7 +572,7 @@ ztable(pval_2_methods,caption="Change in P-values (Poisson vs Hawkes Process)") 
 
 *If the fitting didn't converge, we'll place 0 as place-holders for all the estimates for parameters, KS p-value, and KS statistic.*
 
-As expected, the K-S p-value increases in most cases, as Hawkes process should have more flexibility than Poisson process. And for the cases where p-value doesn't increase are the experiments with less than 10 embolized images. It probably just means that there's more uncertainty. 
+As expected, the K-S p-value increases in most cases, as Hawkes process should have more flexibility than Poisson process. And for the cases where p-value doesn't increase are the experiments with very few or extremely many embolized images. It probably just means that there's more uncertainty. 
 
 
 
@@ -664,7 +664,7 @@ $$
 $$
 
 In the reference below, it only mentioned that $\Lambda(t_i) = \int_{0}^{t_{i}}  \int_{0}^{1} \lambda(s,t) ds dt$ would be a unit rate Poisson process.
-**So, the above might not necessarily follows unit rate exponential distribution.**
+So, the above might not necessarily follows unit rate exponential distribution.
 
 *Reference: A semi-parametric spatiotemporal Hawkes-type point process model with periodic background for crime data (2018)*
 
@@ -689,7 +689,6 @@ The Pearson residual in the time interval $(t_i,t_{i+1}]$:
 $$
 \begin{aligned}
 R_P(B_i) &=  \sum_{j=1}^{i} \frac{1}{\sqrt{{\lambda(s_j,t_j)}}} -  \int_{0}^{t_i} \int_{0}^{1} \sqrt{\lambda(s,t)} ds dt\\
-
 r_{pearson}(t_i,t_{i+1}) &= \frac{1}{t_{i+1}-t_i}(R_P(B_{i+1}) - R_P(B_{i}))\\
 &=  \frac{1}{t_{i+1}-t_i}(\frac{1}{\sqrt{{\lambda(s_{i+1},t_{i+1})}}} - \int_{t_i}^{t_{i+1}} \int_{0}^{1}\sqrt{\lambda(s,t)} ds dt)
 \end{aligned}
@@ -704,9 +703,6 @@ all_STHP_param <- NULL
 not_conv_list <- NULL
 all_STHP_pear_res <- NULL
 for(folder_i in 1:length(all_folders_name_short)){
-  if(folder_i%%max_plot_row==1){# a new fig
-    par(mfrow=c(max_plot_row,3),mar=c(5,4,7,3))#,oma = c(0, 0, 2, 0))# outer margin area (bottom,left,top,right)
-  }
   folder_name_i<- all_folders_name_short[folder_i]
   inter_event_dist_time <- all_inter_event_dist_time[all_inter_event_dist_time$folder_name == folder_name_i,]
   inter_event_time <- inter_event_dist_time$inter_event_time.min.
@@ -760,7 +756,7 @@ for(folder_i in 1:length(all_folders_name_short)){
     print(folder_name_i)
     
     not_conv_list <- c(not_conv_list,folder_name_i)
-    HP_param_i <- c(folder_i, species_idx,n_emb_img,rep(0,7))
+    HP_param_i <- c(folder_i, species_idx,n_emb_img,rep(0,5))
     all_STHP_param <- rbind(all_STHP_param,HP_param_i)
   }else{
     #fitted parameters
@@ -770,57 +766,11 @@ for(folder_i in 1:length(all_folders_name_short)){
     HP_gamma <- hawkes.par$par[4]
     
     
-    ## Histogram of inter-event times fitted by exponential dist
-    #estimate the parameters for exponential dist
-    fit_exp <- fitdistr(inter_event_time, "exponential")
-    hist(inter_event_time, freq = FALSE, breaks = 50, xlim = c(0, quantile(inter_event_time, 0.99)), main = "Histogram of Inter-Event Times", col = color_list[species_idx])
-    curve(dexp(x, rate = fit_exp$estimate), from = 0, col = "red", add = TRUE)
-
-
-    #The durations of the estimated residual process
-    Lambda.test<-STHawkesCompensator(lambda0=HP_lam0,alpha=HP_alpha,beta=HP_beta,gamma=HP_gamma,
-                                     t=times_i,s=col_pos_norm)#different def of compensator
-
-
-    ## QQ Plot using inter-event times
-    p <- ppoints(100)    # 100 equally spaced points on (0,1), excluding endpoints
-    q <- quantile(Lambda.test,p=p,na.rm=TRUE) # percentiles of the sample distribution
-    plot(qexp(p),q, xlab="Theoretical Quantiles",ylab="Empirical Quantiles",cex.lab=1.2,
-          pch=1,cex=1.1,col="Black", main = "Spatio-Temporal Hawkes Process \n Q-Q Plot")
-    qqline(q, distribution=qexp,col="Red", lty=1, lwd=2.5)
-
-    #folder name should be printed at top (side=3) of 2nd subplot
-    mtext(folder_name_i, side=3, line=5)
-    #https://www.r-graph-gallery.com/74-margin-and-oma-cheatsheet.html
-
-
-
-    ## KS Statistic
-    ks_pp <- ks.test(Lambda.test,"pexp")
-    # Warning message:
-    # In ks.test(lambda_res, "pexp") :
-    #   ties should not be present for the Kolmogorov-Smirnov test
-    # Interpretation: The K-S test is for a "continuous distribution" and so your data should not contain any ties (repeated values).
-    # (exponetial dist is "continuous")
-    # statistic (D): sup |F_n(x)-F(x)|: supreme of absolute difference of empirical CDF and
-
-    ## KS Plot
-    #empirical CDF
-    plot(ecdf(Lambda.test),do.points=FALSE, col.01line = "white", verticals=TRUE,col="Black", lwd=3, ylim=c(0,1),
-        xlab= expression(paste(Lambda,"(",t[i],",",t[i+1],")")),ylab="CDF",
-       main = paste("CDF of Inter-Event Times \n p-val=",round(ks_pp$p.value,2), ",\n K-S statistic (D)=",round(ks_pp$statistic,2)))
-    #exponential CDF
-    curve(pexp(x,1), min(Lambda.test),max(Lambda.test),col="Red", lty=1, lwd =2, add=TRUE,
-          xlab="Durations of the estimated residual process",ylab="CDF",cex.lab=1.2)
-
-    legend("bottomright",c("Exponential CDF","Empirical CDF"),lty=c(1,1),lwd=1,col=c("Red","Black"),
-           bty="n",cex=1.2)
-    
     ## Pearson Residual
     pear_res <- Pearson_Res_STHawkes(HP_lam0,HP_alpha,HP_beta,HP_gamma,times_i,col_pos_norm)#slow because integral function is not vectorized 
     all_STHP_pear_res <- c(all_STHP_pear_res, list(list(folder_index=folder_i,foldername=all_folders_name_short[folder_i],pearson_res=pear_res)))
     
-    HP_param_i <- c(folder_i, species_idx,n_emb_img,HP_lam0,HP_alpha,HP_beta,HP_gamma,ks_pp$p.value,ks_pp$statistic,1)
+    HP_param_i <- c(folder_i, species_idx,n_emb_img,HP_lam0,HP_alpha,HP_beta,HP_gamma,1)
     all_STHP_param <- rbind(all_STHP_param,HP_param_i)
     
   }
@@ -835,7 +785,7 @@ for(folder_i in 1:length(all_folders_name_short)){
 ```{r sTHP_print_not_conv}
 #convert to df for plotting later on
 all_STHP_param <- data.frame(all_STHP_param)
-colnames(all_STHP_param) <- c("folder_index","species","num_emb_img","lambda0","alpha","beta","gamma", "KS_pval", "KS_D","converge")
+colnames(all_STHP_param) <- c("folder_index","species","num_emb_img","lambda0","alpha","beta","gamma","converge")
 row.names(all_STHP_param) <- all_folders_name_short[unique(all_STHP_param$folder_index)]
 
 all_STHP_param$not_few_emb <- 1.0
@@ -888,19 +838,6 @@ fig_beta <- ggplot(all_STHP_param, aes(x = folder_index,y = beta, fill = factor(
 grid.arrange(fig_lam0, fig_alpha, fig_beta, fig_gamma, nrow = 2)
 ```
 
-```{r, results="asis"}
-param_2_methods <- merge(all_STHP_param,all_HP_param,by="folder_index")
-col_keep <- c("folder_index","species.x","KS_pval.y","KS_pval.x","num_emb_img.x","converge.y","converge.x")
-pval_2_methods <- param_2_methods[col_keep]
-colnames(pval_2_methods) <- c("folder_index","species","KS_pval_HP","KS_pval_STHP","num_emb_img","converge_HP","converge_STHP")
-pval_2_methods$incr_p_val <- pval_2_methods$KS_pval_STHP - pval_2_methods$KS_pval_HP
-row.names(pval_2_methods) <- all_folders_name_short[pval_2_methods$folder_index]
-ztable(pval_2_methods,caption="Change in P-values (Temporal vs Spatial-Temporal Hawkes Process)") %>%
-    addRowColor(rows=1,bg="#C90000",color="white") %>%
-    addCellColor(condition=incr_p_val>0.0,cols=incr_p_val,color="emerald") %>%
-    addCellColor(condition=converge_STHP<=0.0,cols=converge_STHP,color="red") %>%
-    addCellColor(condition=converge_HP<=0.0,cols=converge_HP,color="red")
-```
 
 ### Paired Samples T-test on Pearson Residuals of Two Models
 
@@ -1012,7 +949,13 @@ If both estimated mean difference and standard deviation are close to 0 (rounded
 
 In short, blue implys where two models perform similarly, and green are for cases where spatiotemporal outperforms temporal Hawkes process model.
 
-TODO: Pearson Residual for STHP
-Deviance Residual?(ref:RESIDUAL ANALYSIS METHODS FOR SPACE-TIME POINT
+TODO: 
+
++ To compare models: Deviance Residual?(ref:RESIDUAL ANALYSIS METHODS FOR SPACE-TIME POINT
 PROCESSES 4.3) or R test? (ref:Assessment of Point Process Models for
 Earthquake Forecasting)
+
++ Analysis on leafs
+
++ Use embolized area as mark?
+
