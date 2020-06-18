@@ -5,6 +5,8 @@ date: "June 17, 2020"
 output: 
   html_document:
     toc: TRUE
+    toc_float:
+      collapsed: no
 ---
 
 ```{r setup, include=FALSE}
@@ -54,6 +56,7 @@ source("Spatial_temporal_hawkes_fx.R")
 library(ggplot2)
 library(gridExtra)#for plotting subplots of ggplot
 library(magrittr)#for %>%
+library(stringr)#for str_replace
 ```
 
 
@@ -69,13 +72,105 @@ total_ss<- read.csv(file.path(dir_path, 'total_summary_stats.csv'), header = TRU
 #times_1 <- total_ss[all_inter_event_dist_time$folder_name == folder_name_i,]$time_since_start.mins.
 ```
 
+## Check Event Time is Valid 
+
+Event time should be monotonically increasing and all be positive in total_ss.
+
+```{r check_event_time}
+valid_folder <- NULL
+start_end_time <- NULL
+for(folder_i in 1:length(all_folders_name_short)){
+  folder_name_i<- all_folders_name_short[folder_i]
+  emb_info_i <- total_ss[total_ss$folder_name==folder_name_i,]
+  time_first_not0 <- emb_info_i$time_since_start.mins.
+  times_i <- time_first_not0
+  
+  if(min(times_i)>=0 && all(diff(times_i) >= 0)){
+    valid_folder <- c(valid_folder,folder_i)
+    start_end_time <- rbind(start_end_time,c(folder_i,min(times_i),max(times_i)))
+  }else{
+    print("invalid folder:")
+    print(folder_i)
+    print(folder_name_i)
+    if(min(times_i)<0){
+      print(paste("min observed event time is negative:",min(times_i)))
+    }
+    if(!all(diff(times_i) >= 0)){
+      print("observed event time isn't monotonically increasing")
+    }
+  }
+  
+}
+
+start_end_time_df <- data.frame(start_end_time)
+row.names(start_end_time_df) <- all_folders_name_short[valid_folder]
+colnames(start_end_time_df) <- c("folder_index","first event time (mins)","last event time (mins)")
+#hasn't aligned 1st event time to 0 across folders
+
+#print(start_end_time_df)
+
+```
+
+
+## Event Time
+
+The color represents species.
+
+```{r plot_event_time, fig.height=8, fig.width=16}
+
+x_max <- max(total_ss$time_since_start.mins.)
+x_step <- as.integer(x_max/10)
+
+margin_btw_folders <- 0.5
+margin_btw_title <- 0.1
+y_max <- 0.7 + margin_btw_title*2+ margin_btw_folders*(length(all_folders_name_short)-1)
+plot(0.5,0,xlim=c(-0.2,x_max),ylim=c(0.7,y_max), type="n",
+     xlab="Time (Mins)",ylab="",xaxt="n",yaxt="n",cex.lab=1.2,bty="n")
+#title("(a)",line=1,cex.main=2)
+axis(2,at=c(1,2),labels=FALSE,cex.lab=1.8,las=2,lwd=0,lwd.ticks=0)
+axis(1,at=seq(0,x_max,x_step),labels=FALSE,cex.lab=1.8,las=2,lwd=1.5,lwd.ticks=1)#x-axis ticks
+text(seq(0,x_max,x_step), y=-0.5, labels=seq(0,x_max,x_step), cex=1, srt=0, xpd=TRUE)#numbers at x-axis ticks
+
+segments(x0=0.1,x1=x_max,y0=y_max - margin_btw_title,col="lightgrey",lwd=2)#light gray line
+
+color_list <- brewer.pal(length(all_species),"Set1")
+
+y_prev <- 0.7 + margin_btw_title*1 + margin_btw_folders*length(all_folders_name_short)
+
+few_emb_th <- 20 #if the folder has total number of embolized img < few_emb_th, consider it as folder with few embolism
+few_emb_folders <- NULL
+for(folder_i in 1:length(all_folders_name_short)){
+  folder_name_i<- all_folders_name_short[folder_i]
+  emb_info_i <- total_ss[total_ss$folder_name==folder_name_i,]
+  time_first_not0 <- emb_info_i$time_since_start.mins.
+  times_i <- time_first_not0
+  
+  if(length(times_i)<few_emb_th){
+    few_emb_folders <- c(few_emb_folders,folder_i)
+  }
+  
+  #get species to determine the color 
+  species_idx = as.numeric(unique(all_inter_event_dist_time[all_inter_event_dist_time$folder_name == folder_name_i,"species"]))#as.numeric: factor df to integer
+  #plot the event time for folder_i
+  y_i <- y_prev - margin_btw_folders
+  points(times_i,rep(y_i,length(times_i)),pch=4,col = color_list[species_idx],cex=1,lwd=2)
+  #plot the folder_name_i
+  folder_name_i_short <- str_replace(folder_name_i,"_stem","")#remove _stem for better plotting
+  text(-200, y=y_i, labels=folder_name_i_short, cex=0.8, srt=0, xpd=TRUE)
+  
+  y_prev <- y_i
+}
+
+title("Event Time")
+```
+
 ## Event Time (aligning the first event time)
 
 The color represents species.
 
-```{r plot_event_time}
+```{r plot_event_time_align_first_event, fig.height=8, fig.width=16}
 
-x_max <- max(all_inter_event_dist_time$inter_event_time.min.)
+x_max <- max(total_ss$time_since_start.mins.)
 x_step <- as.integer(x_max/10)
 
 margin_btw_folders <- 0.5
@@ -113,7 +208,8 @@ for(folder_i in 1:length(all_folders_name_short)){
   y_i <- y_prev - margin_btw_folders
   points(times_i,rep(y_i,length(times_i)),pch=4,col = color_list[species_idx],cex=1,lwd=2)
   #plot the folder_name_i
-  text(-100, y=y_i, labels=folder_name_i, cex=0.8, srt=0, xpd=TRUE)
+  folder_name_i_short <- str_replace(folder_name_i,"_stem","")#remove _stem for better plotting
+  text(-200, y=y_i, labels=folder_name_i_short, cex=0.8, srt=0, xpd=TRUE)
   
   y_prev <- y_i
 }
@@ -222,6 +318,8 @@ row.names(all_PP_param) <- all_folders_name_short
 colnames(all_PP_param) <- c("folder_index","species","lambda","KS_pval","KS_D")
 all_PP_param$not_few_emb <- 1.0
 all_PP_param$not_few_emb[few_emb_folders] <- 0.2#determines how transparent the bar will be when plotted
+
+save(all_PP_param,file = file.path(dir_path,'PP_Poisson_param.RData'))
 ```
 
 QQ plot implying heavy-tailed, probably because is being fitted to a lot of events that are with small inter-event time.
@@ -340,13 +438,14 @@ for(folder_i in 1:length(all_folders_name_short)){
   species_idx = as.numeric(unique(inter_event_dist_time["species"]))#as.numeric: factor df to integer
   
   ## fit hawkes process
-  # hawkes.par.original<-optim(par=rep(0.01,3), fn=uniHawkesNegLogLik,
-  #                   t=times_i, control = list(maxit = 1000) )#works the same as below
+  # hawkes.par.original<-optim(par=rep(0.01,3), fn=TemporalHawkesNegLogLik,
+  #                   t=times_i, control = list(maxit = 1000) )#works the same as below, but this is very slow
+  ##hawkes.par$counts: A two-element integer vector giving the number of calls to fn and gr(gradient) respectively
   
   #try different initialize value if doesn't converge
   beta_initial_cand <- c(0.01,0.1,0.3)
   for(beta_initial in beta_initial_cand){
-     hawkes.par<-optim(par=c(rep(0.01,2),beta_initial), fn=TemporalHawkesNegLogLik,
+     hawkes.par<-optim(par=c(0.1,0.01,beta_initial), fn=TemporalHawkesNegLogLik,
                       t=times_i, control = list(maxit = 1000), lower=c(rep(0,2),1e-10) )#lower: to constrain the parameter space
      if(hawkes.par$convergence==0){#no need to try other beta_initial if already converges
        break
@@ -513,7 +612,9 @@ if(length(not_conv_list)>0){
   print(all_folders_name_short[not_conv_list])
 }
 
-print(all_HP_param)
+print(round(all_HP_param,3))
+save(all_HP_pear_res,file = file.path(dir_path,'PP_TemporalHawkesProc_pear_res.RData'))
+save(all_HP_param,file = file.path(dir_path,'PP_TemporalHawkesProc_param.RData'))
 ```
 
 
@@ -555,7 +656,9 @@ fig_beta <- ggplot(all_HP_param, aes(x = folder_index,y = beta, fill = factor(sp
 grid.arrange(fig_lam0, fig_alpha, fig_beta, nrow = 2)
 ```
 
+#### K-S Test (Poisson vs Hawkes Process)
 
+The durations of the estimated residual process (transformed time sequence) should follow unit rate exponential distribution.
 
 ```{r, results="asis"}
 param_2_methods <- merge(all_HP_param,all_PP_param,by="folder_index")
@@ -567,7 +670,8 @@ row.names(pval_2_methods) <- all_folders_name_short[pval_2_methods$folder_index]
 ztable(pval_2_methods,caption="Change in P-values (Poisson vs Hawkes Process)") %>%
     addRowColor(rows=1,bg="#C90000",color="white") %>%
     addCellColor(condition=incr_p_val>0.0,cols=incr_p_val,color="emerald") %>%
-    addCellColor(condition=converge_HP<=0.0,cols=converge_HP,color="red") 
+    addCellColor(condition=converge_HP<=0.0,cols=converge_HP,color="red") %>%
+    makeHeatmap(palette="Set1",cols=2)#add color to species
 ```
 
 *If the fitting didn't converge, we'll place 0 as place-holders for all the estimates for parameters, KS p-value, and KS statistic.*
@@ -848,7 +952,10 @@ if(length(not_conv_list)>0){
 
 
 
-print(all_STHP_param)
+print(round(all_STHP_param,4))
+
+save(all_STHP_pear_res,file = file.path(dir_path,'PP_STHawkesProc_pear_res.RData'))
+save(all_STHP_param,file = file.path(dir_path,'PP_STHawkesProc_param.RData'))
 ```
 
 
@@ -886,6 +993,8 @@ fig_beta <- ggplot(all_STHP_param, aes(x = folder_index,y = beta, fill = factor(
 grid.arrange(fig_lam0, fig_alpha, fig_beta, fig_gamma, nrow = 2)
 ```
 
+#### K-S Test (Temporal vs Spatial-Temporal Hawkes Process)
+
 ```{r, results="asis"}
 param_2_methods <- merge(all_STHP_param,all_HP_param,by="folder_index")
 col_keep <- c("folder_index","species.x","KS_pval.y","KS_pval.x","num_emb_img.x","converge.y","converge.x")
@@ -897,7 +1006,8 @@ ztable(pval_2_methods,caption="Change in P-values (Temporal vs Spatial-Temporal 
     addRowColor(rows=1,bg="#C90000",color="white") %>%
     addCellColor(condition=incr_p_val>0.0,cols=incr_p_val,color="emerald") %>%
     addCellColor(condition=converge_STHP<=0.0,cols=converge_STHP,color="red") %>%
-    addCellColor(condition=converge_HP<=0.0,cols=converge_HP,color="red")
+    addCellColor(condition=converge_HP<=0.0,cols=converge_HP,color="red")%>%
+    makeHeatmap(palette="Set1",cols=2)#add color to species
 ```
 
 ### Paired Samples T-test on Pearson Residuals of Two Models
@@ -1001,7 +1111,8 @@ ztable(t_test_pvals,caption="Paired Samples T-test (two-sided and one-sided) on 
     addRowColor(rows=1,bg="#C90000",color="white") %>%
     addCellColor(condition=two_sided_p_val>0.05,cols=two_sided_p_val,color="blue") %>%
     addCellColor(condition=one_sided_p_val<=0.05,cols=one_sided_p_val,color="emerald") %>%
-    addCellColor(condition=(abs(std_err)<=5e-3 & abs(est_mean)<=5e-3 ),cols=c(std_err,est_mean),color="lightblue") 
+    addCellColor(condition=(abs(std_err)<=5e-3 & abs(est_mean)<=5e-3 ),cols=c(std_err,est_mean),color="lightblue") %>%
+    makeHeatmap(palette="Set1",cols=2)#add color to species
 ```
 
 If p-value > 0.05 for two-sided paired t-test (highlighted in blue), we fail to reject the null hypothesis that the pearson residuals of two models are not statistically significantly different.
