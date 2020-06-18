@@ -69,6 +69,36 @@ uniHawkesCompensatorPoisson<-function(lambda0,alpha,beta,t){
   return(Lambda)
 }
 
+uniHawkesNegLogLik.constraint <- function(params=list(lambda0,alpha,beta), t) {
+  #https://radhakrishna.typepad.com/mle-of-hawkes-self-exciting-process.pdf
+  #https://stats.stackexchange.com/questions/24685/finding-the-mle-for-a-univariate-exponential-hawkes-process
+  #t should include the first event time
+  #constraint: alpha < beta 
+  #ref: A Tutorial on Hawkes Processes for Events in Social Media (2017) Eq(1.12)
+  lambda0 <- params[[1]]
+  alpha <- params[[2]]
+  beta <- params[[3]]
+  n <- length(t)
+  r <- rep(0,n)
+  if(alpha < beta){#[Diane]constraint on parameter space
+    for(i in 2:n) {
+      r[i] <- exp(-beta*(t[i]-t[i-1]))*(1+r[i-1])
+    }
+    loglik <- -t[n]*lambda0
+    loglik <- loglik+alpha/beta*sum(exp(-beta*(t[n]-t))-1)
+    if(any(lambda0+alpha*r<=0)){
+      loglik<--1e+10 
+    }else{
+      loglik <- loglik+sum(log(lambda0+alpha*r))
+    }
+  }else{
+    loglik<--1e+10 
+  }
+  
+  return(-loglik)
+}
+
+#can be sensitive to initial value(change lambda0 initial value from 0.01 to 0.1, folders 1,2,19 results in very differently)
 uniHawkesNegLogLik <- function(params=list(lambda0,alpha,beta), t) {
   #https://radhakrishna.typepad.com/mle-of-hawkes-self-exciting-process.pdf
   #https://stats.stackexchange.com/questions/24685/finding-the-mle-for-a-univariate-exponential-hawkes-process
@@ -78,6 +108,7 @@ uniHawkesNegLogLik <- function(params=list(lambda0,alpha,beta), t) {
   beta <- params[[3]]
   n <- length(t)
   r <- rep(0,n)
+
   for(i in 2:n) {
     r[i] <- exp(-beta*(t[i]-t[i-1]))*(1+r[i-1])
   }
@@ -88,6 +119,7 @@ uniHawkesNegLogLik <- function(params=list(lambda0,alpha,beta), t) {
   }else{
     loglik <- loglik+sum(log(lambda0+alpha*r))
   }
+ 
   return(-loglik)
 }
 
@@ -154,4 +186,15 @@ Pearson_Res_Hawkes <- function(lambda0,alpha,beta,times){
   }
   return(pearson_res)
   
+}
+
+uniHawkes_max_intensity <- function(param_object,times,start,end){
+  max_int <- 0
+  for(t in start:end){
+    int_t <- uniHawkesntensity(param_object, times, t)#intensity at t
+    if(int_t > max_int){
+      max_int <- int_t
+    }
+  }
+  return(max_int)
 }
