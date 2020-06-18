@@ -1,0 +1,263 @@
+---
+title: "Plot Conditional Intensity"
+author: "Diane Lu"
+date: "June 18, 2020"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float:
+      collapsed: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+if (!require("RColorBrewer")) {
+  install.packages("RColorBrewer")
+  library(RColorBrewer)
+}
+
+# if (!require("MASS")) {#fitdistr
+#   install.packages("MASS")
+#   library(MASS)
+# }
+# 
+# #Modelling and Validation of Non Homogeneous Poisson Processes
+# if (!require("NHPoisson")) {
+#   install.packages("NHPoisson")
+#   library(NHPoisson)
+# }
+
+if (!require("ztable")) {
+  install.packages("ztable")
+  library(ztable)
+}
+
+options(ztable.type = "html")
+
+# if (!require("pracma")) {#for integral2 (double integral)
+#   install.packages("pracma")
+#   library(pracma)
+# }
+
+
+if (!require("ggpubr")) {#for boxplot
+  install.packages("ggpubr")
+  library(ggpubr)
+}
+
+source("HawkesFunctions.R")
+source("Spatial_temporal_hawkes_fx.R")
+library(ggplot2)
+library(gridExtra)#for plotting subplots of ggplot
+library(magrittr)#for %>%
+```
+
+
+```{r load data}
+dir_path <- '../../output'
+all_inter_event_dist_time <- read.csv(file.path(dir_path,'all_inter_event_dist_time.csv'), header = TRUE)
+#need all_folders_name_short
+#all_inter_event_dist_time has folder's species recorded
+all_folders_name_short <- unique(all_inter_event_dist_time$folder_name)
+all_species <- unique(all_inter_event_dist_time$species)
+
+total_ss<- read.csv(file.path(dir_path, 'total_summary_stats.csv'), header = TRUE)
+
+load(file = file.path(dir_path,'0617_have_28_folders','PP_TemporalHawkesProc_param.RData'))#used to get the mapping btw folder_idx and species
+load(file.path(dir_path,'PP_Poisson_param.RData'))
+
+color_list <- brewer.pal(length(all_species),"Set1")
+
+```
+
+```{r,include=FALSE, eval=FALSE}
+max_plot_row <- 2
+
+for(folder_i in 1:length(all_folders_name_short)){
+  if(folder_i%%max_plot_row==1){# a new fig
+    par(mfrow=c(max_plot_row,5),mar=c(5,4,7,3))#,oma = c(0, 0, 2, 0))# outer margin area (bottom,left,top,right)
+  }
+  folder_name_i<- all_folders_name_short[folder_i]
+  inter_event_dist_time <- all_inter_event_dist_time[all_inter_event_dist_time$folder_name == folder_name_i,]
+  inter_event_time <- inter_event_dist_time$inter_event_time.min.
+  times_i <- cumsum(inter_event_time)
+  times_i <- append(times_i, 0, after=0)#insert the first event time as 0
+  n_emb_img <- length(times_i)
+  
+  #get species to determine the color 
+  species_idx = as.numeric(unique(inter_event_dist_time["species"]))#as.numeric: factor df to integer
+  
+  
+  emb_info_i <- total_ss[total_ss$folder_name==folder_name_i,]
+  observed_time_i <- emb_info_i$time_since_start.mins. 
+  #observed event times for folder_i (not aligned by 1st event, i.e. 1st element don't have to be 0)
+  
+  #load estimated parameters
+  HP_param_info <- all_HP_param[which(all_HP_param$folder_index==folder_i),]
+  
+  
+  #continue if hawkes process converges...
+  #if doesn't converge, QQ plot of KS could encounter infinite axis error
+  if(HP_param_info$converge!=1){
+    print(paste("didn't converge:",folder_name_i))
+  }else{
+    #fitted parameters
+    HP_lam0 <- HP_param_info$lambda0
+    HP_alpha <- HP_param_info$alpha
+    HP_beta <- HP_param_info$beta
+    
+    ## Plot Conditional Intensity
+    cond_int_i <- rep(0,length(observed_time_i))#conditional intensity of folder i
+    time_ticks <- 1:round(max(observed_time_i)*1.1)#t_max #x for plot
+    for(t in time_ticks){
+      cond_int_i[t]<- uniHawkesntensity(list(HP_lam0,HP_alpha,HP_beta),observed_time_i,t)
+    }
+    
+    if(HP_alpha==0 && HP_lam0!=0){
+      #HP_lam0 must > 0 
+      #cond_int_i is a positive constant across time, extand y max a bit, so that legend won't overlap with the cond_int_i
+      y_max <- max(cond_int_i)*2
+      y_min <- -max(cond_int_i)*0.3
+      obs_time_y_pos <- 0
+      
+    }else{
+      y_max <- max(cond_int_i)*1.1
+      y_min <- -max(cond_int_i)*0.3
+      obs_time_y_pos <- -max(cond_int_i)*0.1
+    }
+    
+    plot(time_ticks,cond_int_i, type="l", col="blue", lwd=1, xlab="Time", ylab="Conditional Intensity", main="Conditional intensity and Observed Event Times",xlim=c(0,max(time_ticks)), ylim=c(y_min,y_max))
+    points(observed_time_i,rep(obs_time_y_pos,length(observed_time_i)),pch="|",col="black")
+    legend("topright",c("conditional intensity","observed event time"),lty=c(1,NA),lwd=1,col=c("blue","black"),pch=c(NA,"|"),
+           bty="n")
+    mtext(bquote( lambda[0]:~.(round(HP_lam0,4)) ~ "," ~ alpha: ~.(round(HP_alpha,4)) ~ "," ~ beta: ~.(round(HP_beta,4))), side=1, line = -1)
+    
+    
+    ## Histogram of inter-event times fitted by exponential dist
+    #estimate the parameters for exponential dist
+    fit_exp <- fitdistr(inter_event_time, "exponential") 
+    hist(inter_event_time, freq = FALSE, breaks = 50, xlim = c(0, quantile(inter_event_time, 0.99)), main = "Histogram of \n Inter-Event Times", col = color_list[species_idx])
+    curve(dexp(x, rate = fit_exp$estimate), from = 0, col = "red", add = TRUE)
+    
+    
+    # Lambda.test<-uniHawkesCompensator.Owen(lambda0=HP_lam0,alpha=HP_alpha,beta=HP_beta,times_i)
+    # Lambda.test <- Lambda.test[-1]
+    # same as below
+    Lambda.test<-uniHawkesCompensator(lambda0=HP_lam0,alpha=HP_alpha,beta=HP_beta,
+                                      times_i)#different def of compensator than compensator_old
+
+
+    ## QQ Plot using inter-event times
+    p <- ppoints(100)    # 100 equally spaced points on (0,1), excluding endpoints
+    q <- quantile(Lambda.test,p=p,na.rm=TRUE) # percentiles of the sample distribution
+    plot(qexp(p),q, xlab="Theoretical Quantiles",ylab="Empirical Quantiles",cex.lab=1.2,
+          pch=1,cex=1.1,col="Black", main = "Hawkes Process \n Q-Q Plot")
+    qqline(q, distribution=qexp,col="Red", lty=1, lwd=2.5)
+
+    #folder name should be printed at top (side=3) of 2nd subplot
+    mtext(folder_name_i, side=3, line=5)
+    #https://www.r-graph-gallery.com/74-margin-and-oma-cheatsheet.html
+
+
+
+    ## KS Statistic
+    ks_pp <- ks.test(Lambda.test,"pexp")
+    # Warning message:
+    # In ks.test(lambda_res, "pexp") :
+    #   ties should not be present for the Kolmogorov-Smirnov test
+    # Interpretation: The K-S test is for a "continuous distribution" and so your data should not contain any ties (repeated values).
+    # (exponetial dist is "continuous")
+    # statistic (D): sup |F_n(x)-F(x)|: supreme of absolute difference of empirical CDF and
+
+    ## KS Plot
+    #empirical CDF
+    plot(ecdf(Lambda.test),do.points=FALSE, col.01line = "white", verticals=TRUE,col="Black", lwd=3, ylim=c(0,1),
+        xlab= expression(paste(Lambda,"(",t[i],",",t[i+1],")")),ylab="CDF",
+       main = paste("CDF of Inter-Event Times \n p-val=",round(ks_pp$p.value,2), ",\n K-S statistic (D)=",round(ks_pp$statistic,2)))
+
+    #exponential CDF
+    curve(pexp(x,1), min(Lambda.test),max(Lambda.test),col="Red", lty=1, lwd =2, add=TRUE,cex.lab=1.2)
+
+    legend("bottomright",c("Exponential CDF","Empirical CDF"),lty=c(1,1),lwd=1,col=c("Red","Black"),
+           bty="n",cex=0.7)
+    
+    ## Residual plot
+    raw_res <- Raw_Res_Hawkes(compen=Lambda.test,N_t=1:(length(inter_event_time)+1))#N_t=1:n because we assumed there's only one event per img
+    raw_res_drop1 <- raw_res[-1]#drop R(t_1)
+    inter_event_dist <- inter_event_dist_time$inter_event_col_dist
+    plot(inter_event_dist,raw_res_drop1, main = "Residual vs \n Inter-Event Distance")
+    abline(h=0,col="red")
+    
+    
+  }
+  
+  
+  
+}
+```
+
+# Plot Conditional Intensity vs Observed Event Times
++ Dashed line: Poisson Process (color:species)
++ Solid blue line: Temporal Hawkes Process
++ Vertical line segments: Observed Event Time
+
+```{r fig.width=4, fig.height=3}
+t_max <- max(total_ss$time_since_start.mins.)
+#max_plot_row <- 2
+#max_plot_col <- 2
+fig_plotted <- 1
+for(folder_i in 1:length(all_folders_name_short)){
+  # if(fig_plotted%%(max_plot_col*max_plot_row)==1){# a new fig
+  #   par(mfrow=c(max_plot_row,max_plot_col))#,oma = c(0, 0, 2, 0))# outer margin area (bottom,left,top,right)
+  # }
+  folder_name_i <- all_folders_name_short[folder_i]
+  
+  #get species to determine the color 
+  inter_event_dist_time <- all_inter_event_dist_time[all_inter_event_dist_time$folder_name == folder_name_i,]
+  species_idx = as.numeric(unique(inter_event_dist_time["species"]))#as.numeric: factor df to integer
+  
+  emb_info_i <- total_ss[total_ss$folder_name==folder_name_i,]
+  observed_time_i <- emb_info_i$time_since_start.mins. #observed event times for folder_i
+  
+  PP_lambda <- all_PP_param[which(all_PP_param$folder_index==folder_i),"lambda"]
+  HP_param_info <- all_HP_param[which(all_HP_param$folder_index==folder_i),]
+  if(length(HP_param_info$converge)>0 && HP_param_info$converge==1){#if it does converge
+    lambda0 <- HP_param_info$lambda0
+    alpha <- HP_param_info$alpha
+    beta <- HP_param_info$beta
+    
+    cond_int_i <- rep(0,length(observed_time_i))#conditional intensity of folder i
+    time_ticks <- 1:round(max(observed_time_i)*1.1)#t_max #x for plot
+    for(t in time_ticks){
+      cond_int_i[t]<- uniHawkesntensity(list(lambda0,alpha,beta),observed_time_i,t)
+    }
+    
+    if(alpha==0 && lambda0!=0){
+      #lambda0 must > 0 
+      #cond_int_i is a positive constant across time
+      y_max <- max(cond_int_i)*2
+      y_min <- -max(cond_int_i)*0.3
+      obs_time_y_pos <- 0
+      
+    }else{
+      y_max <- max(cond_int_i)*1.1
+      y_min <- -max(cond_int_i)*0.3
+      obs_time_y_pos <- -max(cond_int_i)*0.2
+    }
+    
+    plot(time_ticks,cond_int_i, type="l", col="blue", lwd=1, xlab="Time", ylab="Conditional Intensity", main=paste(folder_i,":",folder_name_i),xlim=c(0,max(time_ticks)), ylim=c(y_min,y_max))
+    abline(h=PP_lambda,col=color_list[species_idx],lwd=2,lty=2)
+    points(observed_time_i,rep(obs_time_y_pos,length(observed_time_i)),pch="|",col="black")
+    # legend("topright",c("Poisson","Temporal Hawkes","observed event time"),
+    #        lty=c(2,1,NA),lwd=1,col=c(color_list[species_idx],"blue","black"),pch=c(NA,NA,"|"),
+    #        bty="n")
+    mtext(bquote( lambda[0]:~.(round(lambda0,4)) ~ "," ~ alpha: ~.(round(alpha,4)) ~ "," ~ beta: ~.(round(beta,4))), side=3, line = 0)#print param value
+    
+    fig_plotted <- fig_plotted+1
+  }#if does converge
+  
+  
+}
+```
+
