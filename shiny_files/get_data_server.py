@@ -9,7 +9,7 @@ import datetime
 start_time = datetime.datetime.now()
 
 parser  = argparse.ArgumentParser(description='Server version for get_data.py')
-parser.add_argument('--disk_path', type = str, default="/rigel/stats/projects/emb_proj/Processed0522")
+parser.add_argument('--disk_path', type = str, default="/rigel/stats/projects/emb_proj/Processed0618")
 parser.add_argument('--output_root_folder', type = str, default="/rigel/stats/projects/emb_proj/output_get_data")
 parser.add_argument('--folder_idx_start', type = int, help = 'Start folder index: 0')
 parser.add_argument('--folder_idx_end', type = int, help = 'End folder index: 52')
