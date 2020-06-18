@@ -1,0 +1,77 @@
+---
+title: "Verify Point Process Model Works"
+author: "Diane Lu"
+date: "June 18, 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+if (!require("hawkes")) {
+  install.packages("hawkes")
+  library(hawkes)
+}
+
+source("HawkesFunctions.R")
+source("Spatial_temporal_hawkes_fx.R")
+```
+
+#check if we can recover the parameter of simulated data
+
+```{r }
+set.seed(0)
+
+check_uni_Hawkes_by_sim <- function(lambda0,alpha,beta,maxT=1500){
+  
+  #simulate data
+  history<-simulateHawkes(lambda0,alpha,beta,maxT)#history[[1]]: observed event time, 3600:Time horizon until which the simulation is to be conducted.
+  print(paste("number of events (simulation):",length(history[[1]]), " observed time length:",maxT))
+  #l<-likelihoodHawkes(lambda0,alpha,beta,history[[1]])#Returns the opposite of the likelihood.
+  
+  #fit data to model to see if we can recover the true parameters
+  beta_initial_cand <- c(0.01,0.1,0.3)#try different initialize values, if doesn't converge
+  for(beta_initial in beta_initial_cand){
+    hawkes.par<-optim(par=c(0.01,0.01,beta_initial), fn=TemporalHawkesNegLogLik,t=history[[1]], control = list(maxit = 1000),lower=c(rep(0,2),1e-10))
+    #hawkes.par$counts: A two-element integer vector giving the number of calls to fn and gr(gradient) respectively
+    
+    if(hawkes.par$convergence==0){#if converges, print out true parameters and estimates of them
+      true_and_est <- rbind(c(lambda0,alpha,beta),round(hawkes.par$par,3))
+      rownames(true_and_est) <- c("true","estimate")
+      colnames(true_and_est) <- c("lambda0","alpha","beta")
+      print(true_and_est)
+      #print(hawkes.par)
+      break#break the loop of trying different initialize values
+    }else{
+      print(paste("didn't converge w/ beta initial value=",beta_initial))
+    }
+  }
+  if(hawkes.par$convergence!=0){
+    print("fail to converge in the end")
+  }
+  
+  
+}
+```
+
+```{r, echo=FALSE,warning=FALSE}
+#warning = fALSE to suppress the wrning of using "method L-BFGS-B (or Brent)" on the code of "optim" with constraint parameter space ("lower" or "upper" is set in optim function)
+check_uni_Hawkes_by_sim(0.014,0.067,0.13,(1537-1)*2)#drygla4_stem #1537 imgs, each img is taken roughly every 2 min interval
+print("If we observed longer and the number of events is larger, it estimates better")
+check_uni_Hawkes_by_sim(0.014,0.067,0.13,5000)#drygla4_stem
+
+print("Try the parameters around the mean:")
+check_uni_Hawkes_by_sim(0.01,0.04,0.5,3000)#around mean
+
+print("Smaller beta --> the effect of past event stay longer:")
+check_uni_Hawkes_by_sim(0.01,0.04,0.1,3000)
+
+print("Increase alpha, make impact of past event stronger:")
+check_uni_Hawkes_by_sim(0.01,0.1,0.5,3000)
+
+
+print("Increase base intensity(lambda0) --> the number of events increases --> estimates better")
+
+check_uni_Hawkes_by_sim(0.2,0.5,0.7,3000)#many events
+
+```
