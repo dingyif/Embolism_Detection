@@ -55,7 +55,53 @@ STHawkesNegLogLik <- function(params=list(lambda0,alpha,beta,gamma), t, s) {
 }
 
 
-#just to double-check that it works the same as uniHawkesNegLogLik in HawkesFunctions.R
+#it works the same as uniHawkesNegLogLik.constraint in HawkesFunctions.R 
+#very slow compared to uniHawkesNegLogLik.constraint in HawkesFunctions.R
+TemporalHawkesNegLogLik.constraint <- function(params=list(lambda0,alpha,beta), t) {
+  #https://radhakrishna.typepad.com/mle-of-hawkes-self-exciting-process.pdf
+  #t should include the first event time
+  #t : time, s: location [0,1]
+  lambda0 <- params[[1]]
+  alpha <- params[[2]]
+  beta <- params[[3]]
+  n <- length(t)
+  
+  if(alpha < beta){#constraint on parameter space
+    #1st term: -integrate_{0}^{t_n} lambda(t) dt
+    time_exp_term <- exp(-beta*(t[n]-t))-1
+    loglik <- -t[n]*lambda0 + alpha/beta*sum(time_exp_term)
+    
+    #2nd term: integrate_{0}^{t_n} log(lambda(t)) dN(t)
+    second_term <- 0
+    for(i in 1:n){
+      inside_log_i <- lambda0
+      if (i>=2){
+        for(k in 1:(i-1)){
+          inside_log_i <- inside_log_i + alpha*exp(-beta*(t[i]-t[k]))
+        }
+      }
+      
+      if(inside_log_i<=0){#to avoid taking log of non-positive values
+        second_to_add_i <- -1e+10
+      }else{
+        second_to_add_i <- log(inside_log_i)
+      }
+      second_term <- second_term + second_to_add_i
+      
+    }
+    loglik <- loglik + second_term
+  }else{
+    loglik<--1e+10
+  }
+  
+  
+  #return "negative" log likelihood
+  return(-loglik)
+}
+
+#it works the same as uniHawkesNegLogLik in HawkesFunctions.R "most of the time"
+#however it's more sensitive to initial values (different initial values could give different results)
+#very slow compared to uniHawkesNegLogLik in HawkesFunctions.R
 TemporalHawkesNegLogLik <- function(params=list(lambda0,alpha,beta), t) {
   #https://radhakrishna.typepad.com/mle-of-hawkes-self-exciting-process.pdf
   #t should include the first event time
@@ -88,6 +134,7 @@ TemporalHawkesNegLogLik <- function(params=list(lambda0,alpha,beta), t) {
     
   }
   loglik <- loglik + second_term
+  
   
   #return "negative" log likelihood
   return(-loglik)
