@@ -86,7 +86,7 @@ for folder_idx in range(folder_idx_start,folder_idx_end+1):
     #used true label, imgs are acutally located in folder_path
     img_folder = dir_path
 
-    input_tif_path = fx.get_input_tif_path(use_predict_tif,has_processed,dir_path,img_folder)
+    input_tif_path = fx.get_input_tif_path_server(use_predict_tif,has_processed,dir_path,img_folder)
     print("tif name:",input_tif_path)
     '''
     Read Data from TIFF file

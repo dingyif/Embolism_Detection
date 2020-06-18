@@ -231,6 +231,24 @@ def get_input_tif_path(use_predict_tif,has_processed,dir_path,img_folder):
             input_tif_path = up_2_date_tiff
     return(input_tif_path)
 
+def get_input_tif_path_server(use_predict_tif,has_processed,dir_path,img_folder):
+    '''
+    get input_tif_path based on user-specified arguments
+    '''
+    if use_predict_tif or not has_processed:
+        input_tif_name = 'predict.tif'
+        input_tif_folder = dir_path
+        input_tif_path = os.path.join(input_tif_folder,input_tif_name)
+    else:
+        #paths for true.tif
+        tiff_paths = sorted(glob.glob(img_folder + '/*.tif'))
+        #make sure have tif file in there for the processed ones
+        if tiff_paths:
+            input_tif_path = tiff_paths[-1]
+        else:
+            sys.exit("Error: no tif file in this folder")
+    return(input_tif_path)
+
 def get_img_idx_from_one_file(file_path):
     '''
     input: 
