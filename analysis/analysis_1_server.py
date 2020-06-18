@@ -95,7 +95,7 @@ def compute_col_dist(cc_emb_info,x_mean,plot_mat_time):
     #summary_statistics = plot_mat_time.groupby('number_emb').mean().iloc[:,-6:]#img level, takes the "weighted" mean of other columns, "weight" would be porportional to the number of pixels in an embolism event
     summary_statistics = plot_mat_time.groupby('cc_num_emb').mean().groupby('number_emb').mean().drop(['row','col'], axis = 1)#[Diane 0522]
     summary_statistics = summary_statistics.merge(cc_col_dist_mean, on = 'time_since_start(mins)')
-    summary_statistics['folder_name'] = folder_name_short.lower()
+    #summary_statistics['folder_name'] = folder_name_short.lower() #[Diane 0618]comment out cuz folder_name_short undefined previously
     return summary_statistics
 
 
